@@ -22,7 +22,7 @@ case class TensorEntry(i: Int, j: Int, k: Int, value: Double)
 /**
  * [[Tensor]] represents 3rd order rows x columns x layers tensor.
  */
-abstract class Tensor {
+abstract class Tensor extends Serializable {
   /** Number of rows in tensor */
   def numRows: Int
 

@@ -16,14 +16,104 @@
 
 package com.github.sadikovi.hosvd
 
+import breeze.linalg.{DenseMatrix => BDM}
+
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
+
 import com.github.sadikovi.hosvd.test.{UnitTestSuite, SparkLocal}
 
 class TensorSuite extends UnitTestSuite with SparkLocal {
+  // test data for simple unfolding
+  private var rdd: RDD[TensorEntry] = null
+
   override def beforeAll() {
     startSparkContext()
+    rdd = sc.parallelize(
+      TensorEntry(0, 0, 0, 0.0 + 111) ::
+      TensorEntry(0, 1, 0, 10.0 + 111) ::
+      TensorEntry(0, 2, 0, 20.0 + 111) ::
+      TensorEntry(1, 0, 0, 100.0 + 111) ::
+      TensorEntry(1, 1, 0, 110.0 + 111) ::
+      TensorEntry(1, 2, 0, 120.0 + 111) ::
+      TensorEntry(2, 0, 0, 200.0 + 111) ::
+      TensorEntry(2, 1, 0, 210.0 + 111) ::
+      TensorEntry(2, 2, 0, 220.0 + 111) ::
+      TensorEntry(3, 0, 0, 300.0 + 111) ::
+      TensorEntry(3, 1, 0, 310.0 + 111) ::
+      TensorEntry(3, 2, 0, 320.0 + 111) ::
+      TensorEntry(0, 0, 1, 1.0 + 111) ::
+      TensorEntry(0, 1, 1, 11.0 + 111) ::
+      TensorEntry(0, 2, 1, 21.0 + 111) ::
+      TensorEntry(1, 0, 1, 101.0 + 111) ::
+      TensorEntry(1, 1, 1, 111.0 + 111) ::
+      TensorEntry(1, 2, 1, 121.0 + 111) ::
+      TensorEntry(2, 0, 1, 201.0 + 111) ::
+      TensorEntry(2, 1, 1, 211.0 + 111) ::
+      TensorEntry(2, 2, 1, 221.0 + 111) ::
+      TensorEntry(3, 0, 1, 301.0 + 111) ::
+      TensorEntry(3, 1, 1, 311.0 + 111) ::
+      TensorEntry(3, 2, 1, 321.0 + 111) ::
+      Nil)
   }
 
   override def afterAll() {
     stopSparkContext()
+  }
+
+  test("Distributed tensor - use provided dimensions") {
+    val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
+    val tensor = new DistributedTensor(entries, 4, 3, 2)
+    tensor.numRows should be (4)
+    tensor.numCols should be (3)
+    tensor.numLayers should be (2)
+  }
+
+  test("Distributed tensor - compute dimensions") {
+    val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
+    val tensor = new DistributedTensor(entries, 0, 0, 0)
+    tensor.numRows should be (1)
+    tensor.numCols should be (1)
+    tensor.numLayers should be (1)
+  }
+
+  test("Distributed tensor - persist entries") {
+    val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
+    entries.getStorageLevel should be (StorageLevel.NONE)
+    val tensor = new DistributedTensor(entries, 0, 0, 0)
+    tensor.entries.getStorageLevel should be (StorageLevel.MEMORY_AND_DISK)
+  }
+
+  test("Distributed tensor - unfold A1") {
+    val tensor = new DistributedTensor(rdd)
+    val result = tensor.unfold(UnfoldDirection.A1)
+    result.isLocal should be (false)
+    val expected = BDM(
+      (111.0, 121.0, 131.0, 112.0, 122.0, 132.0),
+      (211.0, 221.0, 231.0, 212.0, 222.0, 232.0),
+      (311.0, 321.0, 331.0, 312.0, 322.0, 332.0),
+      (411.0, 421.0, 431.0, 412.0, 422.0, 432.0))
+    checkMatrix(result.matrix, expected)
+  }
+
+  test("Distributed tensor - unfold A2") {
+    val tensor = new DistributedTensor(rdd)
+    val result = tensor.unfold(UnfoldDirection.A2)
+    result.isLocal should be (false)
+    val expected = BDM(
+      (111.0, 112.0, 211.0, 212.0, 311.0, 312.0, 411.0, 412.0),
+      (121.0, 122.0, 221.0, 222.0, 321.0, 322.0, 421.0, 422.0),
+      (131.0, 132.0, 231.0, 232.0, 331.0, 332.0, 431.0, 432.0))
+    checkMatrix(result.matrix, expected)
+  }
+
+  test("Distributed tensor - unfold A3") {
+    val tensor = new DistributedTensor(rdd)
+    val result = tensor.unfold(UnfoldDirection.A3)
+    result.isLocal should be (false)
+    val expected = BDM(
+      (111.0, 211.0, 311.0, 411.0, 121.0, 221.0, 321.0, 421.0, 131.0, 231.0, 331.0, 431.0),
+      (112.0, 212.0, 312.0, 412.0, 122.0, 222.0, 322.0, 422.0, 132.0, 232.0, 332.0, 432.0))
+    checkMatrix(result.matrix, expected)
   }
 }

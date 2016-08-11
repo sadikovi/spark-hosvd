@@ -18,4 +18,4 @@ script:
   - sbt -Dspark.testVersion=$TEST_SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage test
   - sbt ++$TRAVIS_SCALA_VERSION assembly
 after_success:
-  - coveralls
+  - sbt coverageReport coveralls

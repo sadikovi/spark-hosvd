@@ -1,0 +1,21 @@
+language: scala
+sudo: false
+cache:
+  directories:
+    - $HOME/.ivy2
+matrix:
+  include:
+    - jdk: openjdk7
+      scala: 2.10.4
+      env: TEST_SPARK_VERSION="1.6.2"
+    # Spark 1.5.0 and Scala 2.11
+    - jdk: openjdk7
+      scala: 2.11.7
+      env: TEST_SPARK_VERSION="1.6.2"
+script:
+  - sbt ++$TRAVIS_SCALA_VERSION scalastyle
+  - sbt ++$TRAVIS_SCALA_VERSION "test:scalastyle"
+  - sbt -Dspark.testVersion=$TEST_SPARK_VERSION ++$TRAVIS_SCALA_VERSION coverage test
+  - sbt ++$TRAVIS_SCALA_VERSION assembly
+after_success:
+  - coveralls

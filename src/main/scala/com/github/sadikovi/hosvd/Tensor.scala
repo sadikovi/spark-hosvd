@@ -17,7 +17,25 @@
 package com.github.sadikovi.hosvd
 
 /** Tensor entry for 'i' row, 'j' column and 'k' layer with value 'value' */
-case class TensorEntry(i: Int, j: Int, k: Int, value: Double)
+case class TensorEntry(i: Int, j: Int, k: Int, value: Double) {
+  override def hashCode: Int = {
+    var result = value.hashCode
+    result = 31 * result + i
+    result = 31 * result + j
+    result = 31 * result + k
+    result
+  }
+
+  override def equals(that: Any): Boolean = {
+    if (that == null || getClass() != that.getClass()) return false
+    val entry = that.asInstanceOf[TensorEntry]
+    entry.i == i && entry.j == j && entry.k == k && entry.value == value
+  }
+
+  override def toString: String = {
+    s"[($i, $j, $k) -> $value]"
+  }
+}
 
 /**
  * [[Tensor]] represents 3rd order rows x columns x layers tensor.

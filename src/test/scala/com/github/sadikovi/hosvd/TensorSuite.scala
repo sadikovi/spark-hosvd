@@ -61,6 +61,25 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
     stopSparkContext()
   }
 
+  test("TensorEntry - equals") {
+    val entry = TensorEntry(0, 0, 0, 1.0)
+    entry.equals(entry) should be (true)
+    entry.equals(TensorEntry(0, 0, 0, 1.0)) should be (true)
+    entry.equals(null) should be (false)
+    entry.equals(TensorEntry(0, 0, 0, 1.1)) should be (false)
+  }
+
+  test("TensorEntry - hashCode") {
+    val entry = TensorEntry(1, 2, 3, 4.5)
+    entry.hashCode() should be (-290585598)
+    TensorEntry(0, 0, 0, 0.0).hashCode should be (0)
+  }
+
+  test("TensorEntry - toString") {
+    val entry = TensorEntry(1, 2, 3, 4.5)
+    entry.toString should be ("[(1, 2, 3) -> 4.5]")
+  }
+
   test("Distributed tensor - use provided dimensions") {
     val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
     val tensor = new DistributedTensor(entries, 4, 3, 2)

@@ -112,6 +112,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
       (211.0, 221.0, 231.0, 212.0, 222.0, 232.0),
       (311.0, 321.0, 331.0, 312.0, 322.0, 332.0),
       (411.0, 421.0, 431.0, 412.0, 422.0, 432.0))
+    result.direction should be (UnfoldDirection.A1)
     checkMatrix(result.matrix, expected)
   }
 
@@ -123,6 +124,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
       (111.0, 112.0, 211.0, 212.0, 311.0, 312.0, 411.0, 412.0),
       (121.0, 122.0, 221.0, 222.0, 321.0, 322.0, 421.0, 422.0),
       (131.0, 132.0, 231.0, 232.0, 331.0, 332.0, 431.0, 432.0))
+    result.direction should be (UnfoldDirection.A2)
     checkMatrix(result.matrix, expected)
   }
 
@@ -133,6 +135,86 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
     val expected = BDM(
       (111.0, 211.0, 311.0, 411.0, 121.0, 221.0, 321.0, 421.0, 131.0, 231.0, 331.0, 431.0),
       (112.0, 212.0, 312.0, 412.0, 122.0, 222.0, 322.0, 422.0, 132.0, 232.0, 332.0, 432.0))
+    result.direction should be (UnfoldDirection.A3)
     checkMatrix(result.matrix, expected)
+  }
+
+  test("Distributed tensor - invalid unfolding direction") {
+    val tensor = new DistributedTensor(rdd)
+    intercept[IllegalArgumentException] {
+      tensor.unfold(null)
+    }
+  }
+
+  test("Distributed tensor - failed dimensions for fold") {
+    val matrix = toCoordinateMatrix(sc, BDM(
+      (1.0, 2.0, 3.0),
+      (1.0, 2.0, 3.0)))
+
+    val exc1 = intercept[IllegalArgumentException] {
+      DistributedTensor.fold(matrix, UnfoldDirection.A1, 10, 6, 10)
+    }
+    exc1.getMessage.startsWith("Failed to match dimensions") should be (true)
+
+    val exc2 = intercept[IllegalArgumentException] {
+      DistributedTensor.fold(matrix, UnfoldDirection.A2, 6, 10, 10)
+    }
+    exc2.getMessage.startsWith("Failed to match dimensions") should be (true)
+
+    val exc3 = intercept[IllegalArgumentException] {
+      DistributedTensor.fold(matrix, UnfoldDirection.A3, 10, 10, 6)
+    }
+    exc3.getMessage.startsWith("Failed to match dimensions") should be (true)
+  }
+
+  test("Distributed tensor - fold A1") {
+    val matrix = toCoordinateMatrix(sc, BDM(
+      (111.0, 121.0, 131.0, 112.0, 122.0, 132.0),
+      (211.0, 221.0, 231.0, 212.0, 222.0, 232.0),
+      (311.0, 321.0, 331.0, 312.0, 322.0, 332.0),
+      (411.0, 421.0, 431.0, 412.0, 422.0, 432.0)))
+    val tensor = DistributedTensor.fold(matrix, UnfoldDirection.A1, 4, 3, 2)
+    checkTensor(tensor.asInstanceOf[DistributedTensor], new DistributedTensor(rdd))
+  }
+
+  test("Distributed tensor - fold A2") {
+    val matrix = toCoordinateMatrix(sc, BDM(
+      (111.0, 112.0, 211.0, 212.0, 311.0, 312.0, 411.0, 412.0),
+      (121.0, 122.0, 221.0, 222.0, 321.0, 322.0, 421.0, 422.0),
+      (131.0, 132.0, 231.0, 232.0, 331.0, 332.0, 431.0, 432.0)))
+    val tensor = DistributedTensor.fold(matrix, UnfoldDirection.A2, 4, 3, 2)
+    checkTensor(tensor.asInstanceOf[DistributedTensor], new DistributedTensor(rdd))
+  }
+
+  test("Distributed tensor - fold A3") {
+    val matrix = toCoordinateMatrix(sc, BDM(
+      (111.0, 211.0, 311.0, 411.0, 121.0, 221.0, 321.0, 421.0, 131.0, 231.0, 331.0, 431.0),
+      (112.0, 212.0, 312.0, 412.0, 122.0, 222.0, 322.0, 422.0, 132.0, 232.0, 332.0, 432.0)))
+    val tensor = DistributedTensor.fold(matrix, UnfoldDirection.A3, 4, 3, 2)
+    checkTensor(tensor.asInstanceOf[DistributedTensor], new DistributedTensor(rdd))
+  }
+
+  test("Distributed tensor - unfold -> fold (A1)") {
+    val tensor = new DistributedTensor(rdd)
+    val matrix = tensor.unfold(UnfoldDirection.A1).matrix
+    val newTensor = DistributedTensor.fold(matrix, UnfoldDirection.A1, tensor.numRows,
+      tensor.numCols, tensor.numLayers).asInstanceOf[DistributedTensor]
+    checkTensor(newTensor, tensor)
+  }
+
+  test("Distributed tensor - unfold -> fold (A2)") {
+    val tensor = new DistributedTensor(rdd)
+    val matrix = tensor.unfold(UnfoldDirection.A2).matrix
+    val newTensor = DistributedTensor.fold(matrix, UnfoldDirection.A2, tensor.numRows,
+      tensor.numCols, tensor.numLayers).asInstanceOf[DistributedTensor]
+    checkTensor(newTensor, tensor)
+  }
+
+  test("Distributed tensor - unfold -> fold (A3)") {
+    val tensor = new DistributedTensor(rdd)
+    val matrix = tensor.unfold(UnfoldDirection.A3).matrix
+    val newTensor = DistributedTensor.fold(matrix, UnfoldDirection.A3, tensor.numRows,
+      tensor.numCols, tensor.numLayers).asInstanceOf[DistributedTensor]
+    checkTensor(newTensor, tensor)
   }
 }

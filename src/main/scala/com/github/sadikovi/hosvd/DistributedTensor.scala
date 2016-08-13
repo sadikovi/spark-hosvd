@@ -94,8 +94,64 @@ class DistributedTensor(
           MatrixEntry(entry.k, entry.i + numRows * entry.j, entry.value)
         }, numLayers, numCols * numRows)
       case otherMode =>
-        throw new Exception(s"Unrecognized unfolding mode $otherMode")
+        throw new IllegalArgumentException(s"Unrecognized unfolding mode $otherMode")
     }
-    DistributedUnfoldResult(matrix)
+    DistributedUnfoldResult(matrix, direction)
+  }
+}
+
+object DistributedTensor extends TensorLike {
+  private def failDimensionsCheck(
+      matrix: CoordinateMatrix,
+      direction: UnfoldDirection.Value,
+      rows: Int,
+      cols: Int,
+      layers: Int): Unit = {
+    throw new IllegalArgumentException("Failed to match dimensions from coordinate matrix to " +
+      s"tensor using direction $direction. Cannot convert ${matrix.numRows}x${matrix.numCols} " +
+      s"into ${rows}x${cols}x${layers}")
+  }
+
+  override def fold(
+      matrix: CoordinateMatrix,
+      direction: UnfoldDirection.Value,
+      rows: Int,
+      cols: Int,
+      layers: Int): Tensor = {
+    val rdd = direction match {
+      case UnfoldDirection.A1 =>
+        if (!(matrix.numRows == rows && matrix.numCols == cols.toLong * layers)) {
+          failDimensionsCheck(matrix, direction, rows, cols, layers)
+        }
+        matrix.entries.map { entry =>
+          val i = entry.i.toInt
+          val j = entry.j.toInt % cols
+          val k = (entry.j - j).toInt / cols
+          TensorEntry(i, j, k, entry.value)
+        }
+      case UnfoldDirection.A2 =>
+        if (!(matrix.numRows == cols && matrix.numCols == rows.toLong * layers)) {
+          failDimensionsCheck(matrix, direction, rows, cols, layers)
+        }
+        matrix.entries.map { entry =>
+          val j = entry.i.toInt
+          val k = entry.j.toInt % layers
+          val i = (entry.j - k).toInt / layers
+          TensorEntry(i, j, k, entry.value)
+        }
+      case UnfoldDirection.A3 =>
+        if (!(matrix.numRows == layers && matrix.numCols == cols.toLong * rows)) {
+          failDimensionsCheck(matrix, direction, rows, cols, layers)
+        }
+        matrix.entries.map { entry =>
+          val i = entry.j.toInt % rows
+          val j = (entry.j - i).toInt / rows
+          val k = entry.i.toInt
+          TensorEntry(i, j, k, entry.value)
+        }
+      case otherMode =>
+        throw new IllegalArgumentException(s"Unrecognized unfolding mode $otherMode")
+    }
+    new DistributedTensor(rdd, rows, cols, layers)
   }
 }

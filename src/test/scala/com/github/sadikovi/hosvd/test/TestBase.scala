@@ -16,10 +16,15 @@
 
 package com.github.sadikovi.hosvd.test
 
+import scala.collection.mutable.ArrayBuffer
+
 import breeze.linalg.{DenseMatrix => BDM}
 
+import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
 import org.apache.spark.sql.DataFrame
+
+import com.github.sadikovi.hosvd.DistributedTensor
 
 trait TestBase {
   /** Compare two DataFrame objects */
@@ -40,7 +45,16 @@ trait TestBase {
     mat
   }
 
-  /** Compare CoordinateMatrix with expected DenseMatrix */
+  /** Convert DenseMatrix into CoordinateMatrix */
+  protected def toCoordinateMatrix(sc: SparkContext, matrix: BDM[Double]): CoordinateMatrix = {
+    val buffer = ArrayBuffer[MatrixEntry]()
+    matrix.foreachKey { case (i, j) =>
+      buffer.append(MatrixEntry(i, j, matrix(i, j)))
+    }
+    new CoordinateMatrix(sc.parallelize(buffer.toSeq))
+  }
+
+  /** Compare CoordinateMatrix to expected DenseMatrix */
   protected def checkMatrix(matrix: CoordinateMatrix, expected: BDM[Double]): Unit = {
     val localMatrix = toBDM(matrix)
     val msg = s"""
@@ -51,5 +65,25 @@ trait TestBase {
     >$expected
     """.stripMargin('>')
     require(localMatrix == expected, msg)
+  }
+
+  /** Compare distributed tensor to expected one */
+  protected def checkTensor(tensor: DistributedTensor, expected: DistributedTensor): Unit = {
+    if (tensor.numRows != expected.numRows || tensor.numCols != expected.numCols ||
+        tensor.numLayers != expected.numLayers) {
+      sys.error(s"Tensor dimensions of $tensor do not match expected $expected")
+    }
+
+    val entries = tensor.entries.collect.sortBy(_.hashCode).toSeq
+    val expectedEntries = expected.entries.collect.sortBy(_.hashCode).toSeq
+
+    val msg = s"""
+    > Tensor does not equal expected tensor.
+    >   Got:
+    >${entries.mkString("[", ", ", "]")}
+    >   Expected:
+    >${expectedEntries.mkString("[", ", ", "]")}
+    """.stripMargin('>')
+    require(entries == expectedEntries, msg)
   }
 }

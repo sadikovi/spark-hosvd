@@ -28,9 +28,18 @@ object UnfoldDirection extends Enumeration {
 abstract class UnfoldResult {
   /** Whether or not result is local matrix */
   def isLocal: Boolean
+
+  /** Direction used for this unfolding */
+  def direction: UnfoldDirection.Value
 }
 
 /** Unfold result for [[DistributedTensor]] */
-case class DistributedUnfoldResult(matrix: CoordinateMatrix) extends UnfoldResult {
+private[hosvd] case class DistributedUnfoldResult(
+    @transient matrix: CoordinateMatrix,
+    private val unfoldDirection: UnfoldDirection.Value)
+  extends UnfoldResult {
+
   override def isLocal: Boolean = false
+
+  override def direction: UnfoldDirection.Value = unfoldDirection
 }

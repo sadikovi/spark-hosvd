@@ -16,6 +16,8 @@
 
 package com.github.sadikovi.hosvd
 
+import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix
+
 /** Tensor entry for 'i' row, 'j' column and 'k' layer with value 'value' */
 case class TensorEntry(i: Int, j: Int, k: Int, value: Double) {
   override def hashCode: Int = {
@@ -56,4 +58,29 @@ abstract class Tensor extends Serializable {
    * @return unfolding result as instance of `UnfoldResult`
    */
   def unfold(direction: UnfoldDirection.Value): UnfoldResult
+
+  override def toString(): String = {
+    s"${getClass.getSimpleName}[$numRows x $numCols x $numLayers]"
+  }
+}
+
+/**
+ * Trait [[TensorLike]] for companion objects to create new tensor.
+ */
+trait TensorLike {
+  /**
+   * Fold matrix by provided direction into tensor.
+   * Dimensions are specified must be checked against actual matrix size and direction.
+   * @param matrix matrix to fold
+   * @param direction direction to fold (usually direction of unfolding for matrix)
+   * @param rows number of rows for created tensor
+   * @param cols number of columns for created tensor
+   * @param layers number of layers for created tensor
+   */
+  def fold(
+      matrix: CoordinateMatrix,
+      direction: UnfoldDirection.Value,
+      rows: Int,
+      cols: Int,
+      layers: Int): Tensor
 }

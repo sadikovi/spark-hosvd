@@ -80,6 +80,12 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
     entry.toString should be ("[(1, 2, 3) -> 4.5]")
   }
 
+  test("DistributedTensor - string repr") {
+    val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
+    val tensor = new DistributedTensor(entries, 4, 3, 2)
+    tensor.toString should be ("DistributedTensor[4 x 3 x 2]")
+  }
+
   test("Distributed tensor - use provided dimensions") {
     val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
     val tensor = new DistributedTensor(entries, 4, 3, 2)

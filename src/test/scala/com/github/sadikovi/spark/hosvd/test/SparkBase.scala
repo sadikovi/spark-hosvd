@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.sadikovi.hosvd.test
+package com.github.sadikovi.spark.hosvd.test
 
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{SparkContext, SparkConf}

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.sadikovi.hosvd.test
+package com.github.sadikovi.spark.hosvd.test
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -26,7 +26,7 @@ import org.apache.spark.sql.DataFrame
 
 import org.scalatest._
 
-import com.github.sadikovi.hosvd.DistributedTensor
+import com.github.sadikovi.spark.hosvd.DistributedTensor
 
 trait TestBase extends Matchers {
   /** Compare two DataFrame objects */

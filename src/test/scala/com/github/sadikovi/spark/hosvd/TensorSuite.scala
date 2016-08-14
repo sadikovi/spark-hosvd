@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package com.github.sadikovi.hosvd
+package com.github.sadikovi.spark.hosvd
 
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
-import com.github.sadikovi.hosvd.test.{UnitTestSuite, SparkLocal}
+import com.github.sadikovi.spark.hosvd.test.{UnitTestSuite, SparkLocal}
 
 class TensorSuite extends UnitTestSuite with SparkLocal {
   // test data for simple unfolding

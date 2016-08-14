@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.github.sadikovi.hosvd
+package com.github.sadikovi.spark.hosvd
 
 import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix
 

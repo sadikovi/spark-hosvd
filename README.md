@@ -12,6 +12,11 @@ Small library for Apache Spark to compute unfolding/folding/HOSVD for distribute
 |---------------|------------------------------|
 | 1.6.x | 0.1.0 |
 
+## Building From Source
+This library is built using `sbt`, to build a JAR file simply run `sbt package` from project root.
+
+## Testing
+Run `sbt test` from project root.
 
 ## Usage
 Import jar into spark-shell or add dependency in main jar for spark-submit.

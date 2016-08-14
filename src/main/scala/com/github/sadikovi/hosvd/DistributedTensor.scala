@@ -16,6 +16,7 @@
 
 package com.github.sadikovi.hosvd
 
+import org.apache.spark.mllib.linalg.SingularValueDecomposition
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -32,9 +33,7 @@ class DistributedTensor(
   extends Tensor {
 
   // Since tensor can be very large, we have to ensure that underlying RDD is persisted
-  if (entries.getStorageLevel == StorageLevel.NONE) {
-    entries.persist(StorageLevel.MEMORY_AND_DISK)
-  }
+  persistTensor(StorageLevel.MEMORY_AND_DISK)
 
   // Whether or not dimensions are already computed
   private var computed: Boolean = false
@@ -97,6 +96,45 @@ class DistributedTensor(
         throw new IllegalArgumentException(s"Unrecognized unfolding mode $otherMode")
     }
     DistributedUnfoldResult(matrix, direction)
+  }
+
+  /** Persist tensor with provided level, if none set */
+  private def persistTensor(level: StorageLevel): Unit = {
+    if (entries.getStorageLevel == StorageLevel.NONE) {
+      entries.persist(level)
+    }
+  }
+
+  override def hosvd(k1: Int, k2: Int, k3: Int): Tensor = {
+    val unfoldingA1 = unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult].matrix.
+      toIndexedRowMatrix
+    val unfoldingA2 = unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult].matrix.
+      toIndexedRowMatrix
+    val unfoldingA3 = unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].matrix.
+      toIndexedRowMatrix
+
+    val svd1 = unfoldingA1.computeSVD(k1, computeU = true)
+    val svd2 = unfoldingA2.computeSVD(k2, computeU = true)
+    val svd3 = unfoldingA3.computeSVD(k3, computeU = true)
+
+    val U1 = svd1.U.toBlockMatrix.transpose
+    val mult1 = U1.multiply(unfoldingA1.toBlockMatrix)
+    val tensor1 = DistributedTensor.fold(mult1.toCoordinateMatrix, UnfoldDirection.A1,
+      mult1.numRows.toInt, numCols, numLayers)
+
+    val U2 = svd2.U.toBlockMatrix.transpose
+    val mult2 = U2.multiply(tensor1.unfold(UnfoldDirection.A2).
+      asInstanceOf[DistributedUnfoldResult].matrix.toBlockMatrix)
+    val tensor2 = DistributedTensor.fold(mult2.toCoordinateMatrix, UnfoldDirection.A2,
+      tensor1.numRows, mult2.numRows.toInt, tensor1.numLayers)
+
+    val U3 = svd3.U.toBlockMatrix.transpose
+    val mult3 = U3.multiply(tensor2.unfold(UnfoldDirection.A3).
+      asInstanceOf[DistributedUnfoldResult].matrix.toBlockMatrix)
+    val tensor3 = DistributedTensor.fold(mult3.toCoordinateMatrix, UnfoldDirection.A3,
+      tensor2.numRows, tensor2.numCols, mult3.numRows.toInt)
+
+    tensor3
   }
 }
 

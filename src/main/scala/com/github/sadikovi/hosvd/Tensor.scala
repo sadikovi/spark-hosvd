@@ -59,6 +59,15 @@ abstract class Tensor extends Serializable {
    */
   def unfold(direction: UnfoldDirection.Value): UnfoldResult
 
+  /**
+   * High order SVD for current tensor, returns core tensor for dimensions specified.
+   * @param k1 number of singular values to keep for unfolding A1
+   * @param k2 number of singular values to keep for unfolding A2
+   * @param k3 number of singular values to keep for unfolding A3
+   * @return core tensor
+   */
+  def hosvd(k1: Int, k2: Int, k3: Int): Tensor
+
   override def toString(): String = {
     s"${getClass.getSimpleName}[$numRows x $numCols x $numLayers]"
   }

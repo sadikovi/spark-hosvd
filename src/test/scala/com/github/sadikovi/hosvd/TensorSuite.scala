@@ -223,4 +223,19 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
       tensor.numCols, tensor.numLayers).asInstanceOf[DistributedTensor]
     checkTensor(newTensor, tensor)
   }
+
+  test("Distributed tensor - hosvd") {
+    val tensor = new DistributedTensor(rdd)
+    val ho = tensor.hosvd(2, 2, 2).asInstanceOf[DistributedTensor]
+    val expected = new DistributedTensor(sc.parallelize(
+      TensorEntry(0, 0, 0, -1438.912) ::
+      TensorEntry(0, 0, 1, 0) ::
+      TensorEntry(1, 0, 0, 0) ::
+      TensorEntry(1, 0, 1, 0.931) ::
+      TensorEntry(0, 1, 0, 0) ::
+      TensorEntry(0, 1, 1, -0.058) ::
+      TensorEntry(1, 1, 0, -15.226) ::
+      TensorEntry(1, 1, 1, -0.048) :: Nil))
+    checkTensorApproximate(ho, expected, ignoreSign = true)
+  }
 }

@@ -24,9 +24,11 @@ import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
 import org.apache.spark.sql.DataFrame
 
+import org.scalatest._
+
 import com.github.sadikovi.hosvd.DistributedTensor
 
-trait TestBase {
+trait TestBase extends Matchers {
   /** Compare two DataFrame objects */
   protected def checkDataFrame(df: DataFrame, expected: DataFrame): Boolean = {
     val got = df.collect().map(_.toString()).sortWith(_ < _)
@@ -85,5 +87,31 @@ trait TestBase {
     >${expectedEntries.mkString("[", ", ", "]")}
     """.stripMargin('>')
     require(entries == expectedEntries, msg)
+  }
+
+  protected def checkTensorApproximate(
+      tensor: DistributedTensor,
+      expected: DistributedTensor,
+      ignoreSign: Boolean = false): Unit = {
+    val threshold = 0.001
+    if (tensor.numRows != expected.numRows || tensor.numCols != expected.numCols ||
+        tensor.numLayers != expected.numLayers) {
+      sys.error(s"Tensor dimensions of $tensor do not match expected $expected")
+    }
+
+    val entries = tensor.entries.collect.sortBy(_.hashCode).toSeq
+    val expectedEntries = expected.entries.collect.sortBy(_.hashCode).toSeq
+
+    entries.foreach { entry =>
+      val value1 = entry.value
+      val value2 = expectedEntries.find { exp =>
+        exp.i == entry.i && exp.j == entry.j && exp.k == entry.k
+      }.get.value
+      if (ignoreSign) {
+        math.abs(value1) should be (math.abs(value2) +- threshold)
+      } else {
+        value1 should be (value2 +- threshold)
+      }
+    }
   }
 }

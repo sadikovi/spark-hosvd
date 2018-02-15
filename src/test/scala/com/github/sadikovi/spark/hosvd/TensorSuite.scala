@@ -106,7 +106,9 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
     val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
     entries.getStorageLevel should be (StorageLevel.NONE)
     val tensor = new DistributedTensor(entries, 0, 0, 0)
+    tensor.persist()
     tensor.entries.getStorageLevel should be (StorageLevel.MEMORY_AND_DISK)
+    tensor.unpersist()
   }
 
   test("Distributed tensor - unfold A1") {

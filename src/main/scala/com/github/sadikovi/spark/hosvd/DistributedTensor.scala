@@ -16,8 +16,8 @@
 
 package com.github.sadikovi.spark.hosvd
 
-import org.apache.spark.mllib.linalg.SingularValueDecomposition
-import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
+import org.apache.spark.mllib.linalg.{Matrix, SingularValueDecomposition}
+import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, IndexedRowMatrix, MatrixEntry}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -31,9 +31,6 @@ class DistributedTensor(
     private var cols: Int,
     private var layers: Int)
   extends Tensor {
-
-  // Since tensor can be very large, we have to ensure that underlying RDD is persisted
-  persistTensor(StorageLevel.MEMORY_AND_DISK)
 
   // Whether or not dimensions are already computed
   private var computed: Boolean = false
@@ -99,10 +96,27 @@ class DistributedTensor(
   }
 
   /** Persist tensor with provided level, if none set */
-  private def persistTensor(level: StorageLevel): Unit = {
+  def persist(level: StorageLevel = StorageLevel.MEMORY_AND_DISK): Unit = {
     if (entries.getStorageLevel == StorageLevel.NONE) {
       entries.persist(level)
     }
+  }
+
+  /** Unpersist tensor entries */
+  def unpersist(): Unit = {
+    entries.unpersist()
+  }
+
+  /** Compute SVD with persistence level */
+  private def computeSVD(
+      matrix: IndexedRowMatrix,
+      k: Int,
+      computeU: Boolean,
+      level: StorageLevel): SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
+    matrix.rows.persist(level)
+    val svd = matrix.computeSVD(k, computeU)
+    matrix.rows.unpersist()
+    svd
   }
 
   override def hosvd(k1: Int, k2: Int, k3: Int): Tensor = {
@@ -113,9 +127,9 @@ class DistributedTensor(
     val unfoldingA3 = unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].matrix.
       toIndexedRowMatrix
 
-    val svd1 = unfoldingA1.computeSVD(k1, computeU = true)
-    val svd2 = unfoldingA2.computeSVD(k2, computeU = true)
-    val svd3 = unfoldingA3.computeSVD(k3, computeU = true)
+    val svd1 = computeSVD(unfoldingA1, k1, computeU = true, level = StorageLevel.MEMORY_AND_DISK)
+    val svd2 = computeSVD(unfoldingA2, k2, computeU = true, level = StorageLevel.MEMORY_AND_DISK)
+    val svd3 = computeSVD(unfoldingA3, k3, computeU = true, level = StorageLevel.MEMORY_AND_DISK)
 
     val U1 = svd1.U.toBlockMatrix.transpose
     val mult1 = U1.multiply(unfoldingA1.toBlockMatrix)

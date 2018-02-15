@@ -2,13 +2,11 @@ name := "spark-hosvd"
 
 organization := "com.github.sadikovi"
 
-scalaVersion := "2.10.5"
-
-crossScalaVersions := Seq("2.10.5", "2.11.7")
+scalaVersion := "2.11.7"
 
 spName := "sadikovi/spark-hosvd"
 
-val defaultSparkVersion = "1.6.2"
+val defaultSparkVersion = "2.2.1"
 
 sparkVersion := sys.props.getOrElse("spark.testVersion", defaultSparkVersion)
 

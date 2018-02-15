@@ -11,6 +11,7 @@ Small library for Apache Spark to compute unfolding/folding/HOSVD for distribute
 | Spark version | spark-hosvd latest version |
 |---------------|------------------------------|
 | 1.6.x | 0.1.0 |
+| 2.2.x | 0.2.0 |
 
 ## Building From Source
 This library is built using `sbt`, to build a JAR file simply run `sbt package` from project root.

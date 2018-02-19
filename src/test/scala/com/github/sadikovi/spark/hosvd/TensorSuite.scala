@@ -241,6 +241,57 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
     checkTensorApproximate(ho, expected, ignoreSign = true)
   }
 
+  test("Distributed tensor - hosvd 2") {
+    // scalastyle:off
+    val rdd = sc.parallelize(Seq(
+      TensorEntry(0, 0, 0, 0.5470), TensorEntry(0, 1, 0, 0.1835), TensorEntry(0, 2, 0, 0.9294), TensorEntry(0, 3, 0, 0.3063),
+      TensorEntry(1, 0, 0, 0.2963), TensorEntry(1, 1, 0, 0.3685), TensorEntry(1, 2, 0, 0.7757), TensorEntry(1, 3, 0, 0.5085),
+      TensorEntry(2, 0, 0, 0.7447), TensorEntry(2, 1, 0, 0.6256), TensorEntry(2, 2, 0, 0.4868), TensorEntry(2, 3, 0, 0.5108),
+      TensorEntry(3, 0, 0, 0.1890), TensorEntry(3, 1, 0, 0.7802), TensorEntry(3, 2, 0, 0.4359), TensorEntry(3, 3, 0, 0.8176),
+      TensorEntry(4, 0, 0, 0.6868), TensorEntry(4, 1, 0, 0.0811), TensorEntry(4, 2, 0, 0.4468), TensorEntry(4, 3, 0, 0.7948),
+
+      TensorEntry(0, 0, 1, 0.6443), TensorEntry(0, 1, 1, 0.9390), TensorEntry(0, 2, 1, 0.2077), TensorEntry(0, 3, 1, 0.1948),
+      TensorEntry(1, 0, 1, 0.3786), TensorEntry(1, 1, 1, 0.8759), TensorEntry(1, 2, 1, 0.3012), TensorEntry(1, 3, 1, 0.2259),
+      TensorEntry(2, 0, 1, 0.8116), TensorEntry(2, 1, 1, 0.5502), TensorEntry(2, 2, 1, 0.4709), TensorEntry(2, 3, 1, 0.1707),
+      TensorEntry(3, 0, 1, 0.5328), TensorEntry(3, 1, 1, 0.6225), TensorEntry(3, 2, 1, 0.2305), TensorEntry(3, 3, 1, 0.2277),
+      TensorEntry(4, 0, 1, 0.3507), TensorEntry(4, 1, 1, 0.5870), TensorEntry(4, 2, 1, 0.8443), TensorEntry(4, 3, 1, 0.4357),
+
+      TensorEntry(0, 0, 2, 0.3111), TensorEntry(0, 1, 2, 0.9797), TensorEntry(0, 2, 2, 0.5949), TensorEntry(0, 3, 2, 0.1174),
+      TensorEntry(1, 0, 2, 0.9234), TensorEntry(1, 1, 2, 0.4389), TensorEntry(1, 2, 2, 0.2622), TensorEntry(1, 3, 2, 0.2967),
+      TensorEntry(2, 0, 2, 0.4302), TensorEntry(2, 1, 2, 0.1111), TensorEntry(2, 2, 2, 0.6028), TensorEntry(2, 3, 2, 0.3188),
+      TensorEntry(3, 0, 2, 0.1848), TensorEntry(3, 1, 2, 0.2581), TensorEntry(3, 2, 2, 0.7112), TensorEntry(3, 3, 2, 0.4242),
+      TensorEntry(4, 0, 2, 0.9049), TensorEntry(4, 1, 2, 0.4087), TensorEntry(4, 2, 2, 0.2217), TensorEntry(4, 3, 2, 0.5079),
+
+      TensorEntry(0, 0, 3, 0.0855), TensorEntry(0, 1, 3, 0.7303), TensorEntry(0, 2, 3, 0.9631), TensorEntry(0, 3, 3, 0.6241),
+      TensorEntry(1, 0, 3, 0.2625), TensorEntry(1, 1, 3, 0.4886), TensorEntry(1, 2, 3, 0.5468), TensorEntry(1, 3, 3, 0.6791),
+      TensorEntry(2, 0, 3, 0.8010), TensorEntry(2, 1, 3, 0.5785), TensorEntry(2, 2, 3, 0.5211), TensorEntry(2, 3, 3, 0.3955),
+      TensorEntry(3, 0, 3, 0.0292), TensorEntry(3, 1, 3, 0.2373), TensorEntry(3, 2, 3, 0.2316), TensorEntry(3, 3, 3, 0.3674),
+      TensorEntry(4, 0, 3, 0.9289), TensorEntry(4, 1, 3, 0.4588), TensorEntry(4, 2, 3, 0.4889), TensorEntry(4, 3, 3, 0.9880)
+    ))
+    // scalastyle:on
+
+    val tensor = new DistributedTensor(rdd)
+    val core = tensor.hosvd(3, 3, 3)
+
+    checkMatrixAbs(core.getLayer(0), BDM(
+      (-4.46399611738112, 0.0401457449506178, 0.0476955115397744),
+      (0.0653100349599707, 0.493191023130688, -0.731872604065162),
+      (-0.0768425671492504, -0.0169142559860555, -0.00705104400334135)
+    ))
+
+    checkMatrixAbs(core.getLayer(1), BDM(
+      (0.0999212994929081, 0.481115476716687, 0.692488088239690),
+      (0.0321330730148846, 0.606677868061273, 0.122390294672478),
+      (-0.0561174474261208, -0.0743559447131433, -0.431054307745373)
+    ))
+
+    checkMatrixAbs(core.getLayer(2), BDM(
+      (0.0572370577534474, -0.0763782788051653, 0.168214618855026),
+      (-0.0254492600341017, 0.539793831216911, -0.211410567549553),
+      (0.268158537616755, 0.506546738132916, 0.363850227887210)
+    ))
+  }
+
   test("Distributed tensor - getLayer") {
     val tensor = new DistributedTensor(rdd)
     checkMatrix(tensor.getLayer(0), BDM(

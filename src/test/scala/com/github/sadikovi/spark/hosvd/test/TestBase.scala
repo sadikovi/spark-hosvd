@@ -61,24 +61,27 @@ trait TestBase extends Matchers {
   protected def checkMatrixT(
       matrix: CoordinateMatrix,
       expected: BDM[Double],
-      threshold: Double): Unit = {
+      threshold: Double,
+      abs: Boolean): Unit = {
     val localMatrix = toBDM(matrix)
-    checkMatrixT(toBDM(matrix), expected, threshold)
+    checkMatrixT(toBDM(matrix), expected, threshold, abs)
   }
 
   /** Compare mllib Matrix to expected DenseMatrix */
   protected def checkMatrixT(
       matrix: Matrix,
       expected: BDM[Double],
-      threshold: Double): Unit = {
+      threshold: Double,
+      abs: Boolean): Unit = {
     val localMatrix = new BDM(matrix.numRows, matrix.numCols, matrix.toArray)
-    checkMatrixT(localMatrix, expected, threshold)
+    checkMatrixT(localMatrix, expected, threshold, abs)
   }
 
   protected def checkMatrixT(
       matrix: BDM[Double],
       expected: BDM[Double],
-      threshold: Double): Unit = {
+      threshold: Double,
+      abs: Boolean): Unit = {
     val msg = s"""
       > Matrix does not equal to expected matrix.
       >   Got:
@@ -88,20 +91,33 @@ trait TestBase extends Matchers {
     """.stripMargin('>')
     require(matrix.rows == expected.rows && matrix.cols == expected.cols, msg)
     matrix.toArray.zip(expected.toArray).foreach { case (value1, value2) =>
-      require(Math.abs(value1 - value2) <= threshold, msg)
+      val delta = if (abs) Math.abs(value1) - Math.abs(value2) else value1 - value2
+      require(Math.abs(delta) <= threshold, msg)
     }
   }
 
   protected def checkMatrix(matrix: CoordinateMatrix, expected: BDM[Double]): Unit = {
-    checkMatrixT(matrix, expected, 1e-8)
+    checkMatrixT(matrix, expected, 1e-8, false)
   }
 
   protected def checkMatrix(matrix: Matrix, expected: BDM[Double]): Unit = {
-    checkMatrixT(matrix, expected, 1e-8)
+    checkMatrixT(matrix, expected, 1e-8, false)
   }
 
   protected def checkMatrix(matrix: BDM[Double], expected: BDM[Double]): Unit = {
-    checkMatrixT(matrix, expected, 1e-8)
+    checkMatrixT(matrix, expected, 1e-8, false)
+  }
+
+  protected def checkMatrixAbs(matrix: CoordinateMatrix, expected: BDM[Double]): Unit = {
+    checkMatrixT(matrix, expected, 1e-8, true)
+  }
+
+  protected def checkMatrixAbs(matrix: Matrix, expected: BDM[Double]): Unit = {
+    checkMatrixT(matrix, expected, 1e-8, true)
+  }
+
+  protected def checkMatrixAbs(matrix: BDM[Double], expected: BDM[Double]): Unit = {
+    checkMatrixT(matrix, expected, 1e-8, true)
   }
 
   /** Compare distributed tensor to expected one */

@@ -16,6 +16,7 @@
 
 package com.github.sadikovi.spark.hosvd
 
+import org.apache.spark.mllib.linalg.Matrix
 import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix
 
 /** Tensor entry for 'i' row, 'j' column and 'k' layer with value 'value' */
@@ -51,6 +52,9 @@ abstract class Tensor extends Serializable {
 
   /** Number of layers in tensor */
   def numLayers: Int
+
+  /** Get layer slice of tensor */
+  def getLayer(layer: Int): Matrix
 
   /**
    * Unfold current tensor with direction.

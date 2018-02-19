@@ -28,7 +28,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
   private var rdd: RDD[TensorEntry] = null
 
   override def beforeAll() {
-    startSparkContext()
+    startSparkSession()
     rdd = sc.parallelize(
       TensorEntry(0, 0, 0, 0.0 + 111) ::
       TensorEntry(0, 1, 0, 10.0 + 111) ::
@@ -58,7 +58,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
   }
 
   override def afterAll() {
-    stopSparkContext()
+    stopSparkSession()
   }
 
   test("TensorEntry - equals") {
@@ -239,5 +239,33 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
       TensorEntry(1, 1, 0, -15.226) ::
       TensorEntry(1, 1, 1, -0.048) :: Nil))
     checkTensorApproximate(ho, expected, ignoreSign = true)
+  }
+
+  test("Distributed tensor - getLayer") {
+    val tensor = new DistributedTensor(rdd)
+    checkMatrix(tensor.getLayer(0), BDM(
+      (111.0, 121.0, 131.0),
+      (211.0, 221.0, 231.0),
+      (311.0, 321.0, 331.0),
+      (411.0, 421.0, 431.0)
+    ))
+    checkMatrix(tensor.getLayer(1), BDM(
+      (112.0, 122.0, 132.0),
+      (212.0, 222.0, 232.0),
+      (312.0, 322.0, 332.0),
+      (412.0, 422.0, 432.0)
+    ))
+
+    intercept[IllegalArgumentException] {
+      tensor.getLayer(2)
+    }
+  }
+
+  test("Distributed tensor - rand, hosvd") {
+    val tensor = DistributedTensor.rand(spark, 10, 8, 4)
+    val core = tensor.hosvd(7, 3, 2)
+    assert(core.numRows === 7)
+    assert(core.numCols === 3)
+    assert(core.numLayers === 2)
   }
 }

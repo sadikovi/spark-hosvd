@@ -21,6 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.mllib.linalg.Matrix
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
 import org.apache.spark.sql.DataFrame
 
@@ -59,6 +60,16 @@ trait TestBase extends Matchers {
   /** Compare CoordinateMatrix to expected DenseMatrix */
   protected def checkMatrix(matrix: CoordinateMatrix, expected: BDM[Double]): Unit = {
     val localMatrix = toBDM(matrix)
+    checkMatrix(toBDM(matrix), expected)
+  }
+
+  /** Compare mllib Matrix to expected DenseMatrix */
+  protected def checkMatrix(matrix: Matrix, expected: BDM[Double]): Unit = {
+    val localMatrix = new BDM(matrix.numRows, matrix.numCols, matrix.toArray)
+    checkMatrix(localMatrix, expected)
+  }
+
+  private def checkMatrix(localMatrix: BDM[Double], expected: BDM[Double]): Unit = {
     val msg = s"""
     > Matrix does not equal expected matrix.
     >   Got:

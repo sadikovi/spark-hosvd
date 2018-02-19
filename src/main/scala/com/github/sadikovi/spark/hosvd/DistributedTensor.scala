@@ -19,6 +19,7 @@ package com.github.sadikovi.spark.hosvd
 import org.apache.spark.mllib.linalg.{Matrix, SingularValueDecomposition}
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, IndexedRowMatrix, MatrixEntry}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -73,6 +74,14 @@ class DistributedTensor(
       computeSize()
     }
     layers
+  }
+
+  override def getLayer(layer: Int): Matrix = {
+    require(layer >= 0 && layer < numLayers,
+      s"Invalid layer $layer of tensor (total layers $numLayers)")
+    val rdd = entries.filter { _.k == layer }.map { entry =>
+      MatrixEntry(entry.i, entry.j, entry.value) }
+    new CoordinateMatrix(rdd, numRows, numCols).toBlockMatrix.toLocalMatrix
   }
 
   override def unfold(direction: UnfoldDirection.Value): DistributedUnfoldResult = {
@@ -153,6 +162,23 @@ class DistributedTensor(
 }
 
 object DistributedTensor extends TensorLike {
+  /** Create tensor from random data */
+  def rand(
+      spark: SparkSession,
+      rows: Int,
+      cols: Int,
+      layers: Int,
+      numPartitions: Int = 200): DistributedTensor = {
+    val rdd = spark.sparkContext.parallelize(0 until rows, numPartitions).flatMap { row =>
+      for (col <- 0 until cols) yield (row, col)
+    }.flatMap { case (row, col) =>
+      for (layer <- 0 until layers) yield {
+        TensorEntry(row, col, layer, new java.util.Random().nextDouble())
+      }
+    }
+    new DistributedTensor(rdd, rows, cols, layers)
+  }
+
   private def failDimensionsCheck(
       matrix: CoordinateMatrix,
       direction: UnfoldDirection.Value,

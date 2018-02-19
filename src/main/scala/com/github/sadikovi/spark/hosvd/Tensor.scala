@@ -16,8 +16,8 @@
 
 package com.github.sadikovi.spark.hosvd
 
-import org.apache.spark.mllib.linalg.Matrix
-import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix
+import org.apache.spark.mllib.linalg.{Matrix, SingularValueDecomposition}
+import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, IndexedRowMatrix}
 
 /** Tensor entry for 'i' row, 'j' column and 'k' layer with value 'value' */
 case class TensorEntry(i: Int, j: Int, k: Int, value: Double) {
@@ -71,6 +71,16 @@ abstract class Tensor extends Serializable {
    * @return core tensor
    */
   def hosvd(k1: Int, k2: Int, k3: Int): Tensor
+
+  /**
+   * Unfold by specified direction and compute svd on the unfolding.
+   * @param k number of singular values to keep
+   * @param direction unfolding direction
+   * @return singular value decomposition
+   */
+  def computeSVD(
+      k: Int,
+      direction: UnfoldDirection.Value): SingularValueDecomposition[IndexedRowMatrix, Matrix]
 
   override def toString(): String = {
     s"${getClass.getSimpleName}[$numRows x $numCols x $numLayers]"

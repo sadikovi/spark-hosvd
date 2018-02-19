@@ -16,7 +16,7 @@
 
 package com.github.sadikovi.spark.hosvd
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, _}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -267,5 +267,12 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
     assert(core.numRows === 7)
     assert(core.numCols === 3)
     assert(core.numLayers === 2)
+  }
+
+  test("Distributed tensor - computeSVD") {
+    val tensor = new DistributedTensor(rdd)
+    val svd = tensor.computeSVD(4, UnfoldDirection.A1)
+    assert(svd.U.numRows == 4 && svd.U.numCols == 4)
+    assert(svd.V.numRows == 6 && svd.V.numCols == 4)
   }
 }

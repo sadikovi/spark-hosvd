@@ -58,26 +58,50 @@ trait TestBase extends Matchers {
   }
 
   /** Compare CoordinateMatrix to expected DenseMatrix */
-  protected def checkMatrix(matrix: CoordinateMatrix, expected: BDM[Double]): Unit = {
+  protected def checkMatrixT(
+      matrix: CoordinateMatrix,
+      expected: BDM[Double],
+      threshold: Double): Unit = {
     val localMatrix = toBDM(matrix)
-    checkMatrix(toBDM(matrix), expected)
+    checkMatrixT(toBDM(matrix), expected, threshold)
   }
 
   /** Compare mllib Matrix to expected DenseMatrix */
-  protected def checkMatrix(matrix: Matrix, expected: BDM[Double]): Unit = {
+  protected def checkMatrixT(
+      matrix: Matrix,
+      expected: BDM[Double],
+      threshold: Double): Unit = {
     val localMatrix = new BDM(matrix.numRows, matrix.numCols, matrix.toArray)
-    checkMatrix(localMatrix, expected)
+    checkMatrixT(localMatrix, expected, threshold)
   }
 
-  private def checkMatrix(localMatrix: BDM[Double], expected: BDM[Double]): Unit = {
+  protected def checkMatrixT(
+      matrix: BDM[Double],
+      expected: BDM[Double],
+      threshold: Double): Unit = {
     val msg = s"""
-    > Matrix does not equal expected matrix.
-    >   Got:
-    >$localMatrix
-    >   Expected:
-    >$expected
+      > Matrix does not equal to expected matrix.
+      >   Got:
+      >$matrix
+      >   Expected:
+      >$expected
     """.stripMargin('>')
-    require(localMatrix == expected, msg)
+    require(matrix.rows == expected.rows && matrix.cols == expected.cols, msg)
+    matrix.toArray.zip(expected.toArray).foreach { case (value1, value2) =>
+      require(Math.abs(value1 - value2) <= threshold, msg)
+    }
+  }
+
+  protected def checkMatrix(matrix: CoordinateMatrix, expected: BDM[Double]): Unit = {
+    checkMatrixT(matrix, expected, 1e-8)
+  }
+
+  protected def checkMatrix(matrix: Matrix, expected: BDM[Double]): Unit = {
+    checkMatrixT(matrix, expected, 1e-8)
+  }
+
+  protected def checkMatrix(matrix: BDM[Double], expected: BDM[Double]): Unit = {
+    checkMatrixT(matrix, expected, 1e-8)
   }
 
   /** Compare distributed tensor to expected one */

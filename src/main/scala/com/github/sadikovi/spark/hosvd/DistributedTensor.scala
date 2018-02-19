@@ -159,6 +159,13 @@ class DistributedTensor(
 
     tensor3
   }
+
+  override def computeSVD(
+      k: Int,
+      direction: UnfoldDirection.Value): SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
+    val matrix = unfold(direction).matrix.toIndexedRowMatrix
+    computeSVD(matrix, k, computeU = true, level = StorageLevel.MEMORY_AND_DISK)
+  }
 }
 
 object DistributedTensor extends TensorLike {

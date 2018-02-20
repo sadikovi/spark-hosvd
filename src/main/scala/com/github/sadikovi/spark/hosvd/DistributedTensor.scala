@@ -16,8 +16,8 @@
 
 package com.github.sadikovi.spark.hosvd
 
-import org.apache.spark.mllib.linalg.{Matrix, SingularValueDecomposition}
-import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, IndexedRowMatrix, MatrixEntry}
+import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.linalg.distributed._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
@@ -84,7 +84,7 @@ class DistributedTensor(
     new CoordinateMatrix(rdd, numRows, numCols).toBlockMatrix.toLocalMatrix
   }
 
-  override def unfold(direction: UnfoldDirection.Value): DistributedUnfoldResult = {
+  override def unfold(direction: UnfoldDirection.Value): UnfoldResult = {
     val matrix = direction match {
       case UnfoldDirection.A1 =>
         new CoordinateMatrix(entries.map { entry =>
@@ -116,29 +116,16 @@ class DistributedTensor(
     entries.unpersist()
   }
 
-  /** Compute SVD with persistence level */
-  private def computeSVD(
-      matrix: IndexedRowMatrix,
-      k: Int,
-      computeU: Boolean,
-      level: StorageLevel): SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
-    matrix.rows.persist(level)
-    val svd = matrix.computeSVD(k, computeU)
-    matrix.rows.unpersist()
-    svd
-  }
-
   override def hosvd(k1: Int, k2: Int, k3: Int): Tensor = {
-    val unfoldingA1 = unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult].matrix.
-      toIndexedRowMatrix
-    val unfoldingA2 = unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult].matrix.
-      toIndexedRowMatrix
-    val unfoldingA3 = unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].matrix.
-      toIndexedRowMatrix
+    persist()
 
-    val svd1 = computeSVD(unfoldingA1, k1, computeU = true, level = StorageLevel.MEMORY_AND_DISK)
-    val svd2 = computeSVD(unfoldingA2, k2, computeU = true, level = StorageLevel.MEMORY_AND_DISK)
-    val svd3 = computeSVD(unfoldingA3, k3, computeU = true, level = StorageLevel.MEMORY_AND_DISK)
+    val unfoldingA1 = unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult].matrix
+    val unfoldingA2 = unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult].matrix
+    val unfoldingA3 = unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].matrix
+
+    val svd1 = DistributedTensor.computeSVD(unfoldingA1, k1, level = StorageLevel.MEMORY_AND_DISK)
+    val svd2 = DistributedTensor.computeSVD(unfoldingA2, k2, level = StorageLevel.MEMORY_AND_DISK)
+    val svd3 = DistributedTensor.computeSVD(unfoldingA3, k3, level = StorageLevel.MEMORY_AND_DISK)
 
     val U1 = svd1.U.toBlockMatrix.transpose
     val mult1 = U1.multiply(unfoldingA1.toBlockMatrix)
@@ -157,14 +144,16 @@ class DistributedTensor(
     val tensor3 = DistributedTensor.fold(mult3.toCoordinateMatrix, UnfoldDirection.A3,
       tensor2.numRows, tensor2.numCols, mult3.numRows.toInt)
 
+    unpersist()
+
     tensor3
   }
 
   override def computeSVD(
       k: Int,
       direction: UnfoldDirection.Value): SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
-    val matrix = unfold(direction).matrix.toIndexedRowMatrix
-    computeSVD(matrix, k, computeU = true, level = StorageLevel.MEMORY_AND_DISK)
+    val matrix = unfold(direction).asInstanceOf[DistributedUnfoldResult].matrix
+    DistributedTensor.computeSVD(matrix, k, level = StorageLevel.MEMORY_AND_DISK)
   }
 }
 
@@ -238,5 +227,43 @@ object DistributedTensor extends TensorLike {
         throw new IllegalArgumentException(s"Unrecognized unfolding mode $otherMode")
     }
     new DistributedTensor(rdd, rows, cols, layers)
+  }
+
+  def computeSVD(
+      matrix: CoordinateMatrix,
+      k: Int,
+      level: StorageLevel,
+      rCond: Double = 1e-9):
+    SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
+
+    val sc = matrix.entries.sparkContext
+
+    // whether or not input matrix is transposed
+    val transposed = matrix.numCols() > matrix.numRows()
+
+    val irm = (if (transposed) matrix.transpose else matrix).toIndexedRowMatrix
+    irm.rows.persist(level)
+    val svd = irm.computeSVD(k, computeU = true, rCond = rCond)
+    val uarr = svd.U.rows.collect()
+    val urows = uarr.length
+    val ucols = uarr.head.vector.size
+    irm.rows.unpersist()
+
+    if (transposed) {
+      val U = new DenseMatrix(urows, ucols, uarr.flatMap { _.vector.toArray }, true)
+      val s = svd.s
+      val V = svd.V.transpose
+      val vrows = V.numRows
+      val vcols = V.numCols
+
+      val rows = V.toArray.sliding(vrows, vrows).
+        zipWithIndex.
+        map { case (arr, row) => IndexedRow(row, Vectors.dense(arr)) }.toSeq
+      val vmat = new IndexedRowMatrix(sc.parallelize(rows), vcols, vrows)
+      SingularValueDecomposition(vmat, svd.s, U)
+    } else {
+      val U = new IndexedRowMatrix(sc.parallelize(uarr), urows, ucols)
+      SingularValueDecomposition(U, svd.s, svd.V)
+    }
   }
 }

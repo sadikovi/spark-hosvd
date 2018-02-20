@@ -113,7 +113,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
 
   test("Distributed tensor - unfold A1") {
     val tensor = new DistributedTensor(rdd)
-    val result = tensor.unfold(UnfoldDirection.A1)
+    val result = tensor.unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult]
     result.isLocal should be (false)
     val expected = BDM(
       (111.0, 121.0, 131.0, 112.0, 122.0, 132.0),
@@ -126,7 +126,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
 
   test("Distributed tensor - unfold A2") {
     val tensor = new DistributedTensor(rdd)
-    val result = tensor.unfold(UnfoldDirection.A2)
+    val result = tensor.unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult]
     result.isLocal should be (false)
     val expected = BDM(
       (111.0, 112.0, 211.0, 212.0, 311.0, 312.0, 411.0, 412.0),
@@ -138,7 +138,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
 
   test("Distributed tensor - unfold A3") {
     val tensor = new DistributedTensor(rdd)
-    val result = tensor.unfold(UnfoldDirection.A3)
+    val result = tensor.unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult]
     result.isLocal should be (false)
     val expected = BDM(
       (111.0, 211.0, 311.0, 411.0, 121.0, 221.0, 321.0, 421.0, 131.0, 231.0, 331.0, 431.0),
@@ -204,7 +204,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
 
   test("Distributed tensor - unfold -> fold (A1)") {
     val tensor = new DistributedTensor(rdd)
-    val matrix = tensor.unfold(UnfoldDirection.A1).matrix
+    val matrix = tensor.unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult].matrix
     val newTensor = DistributedTensor.fold(matrix, UnfoldDirection.A1, tensor.numRows,
       tensor.numCols, tensor.numLayers).asInstanceOf[DistributedTensor]
     checkTensor(newTensor, tensor)
@@ -212,7 +212,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
 
   test("Distributed tensor - unfold -> fold (A2)") {
     val tensor = new DistributedTensor(rdd)
-    val matrix = tensor.unfold(UnfoldDirection.A2).matrix
+    val matrix = tensor.unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult].matrix
     val newTensor = DistributedTensor.fold(matrix, UnfoldDirection.A2, tensor.numRows,
       tensor.numCols, tensor.numLayers).asInstanceOf[DistributedTensor]
     checkTensor(newTensor, tensor)
@@ -220,7 +220,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
 
   test("Distributed tensor - unfold -> fold (A3)") {
     val tensor = new DistributedTensor(rdd)
-    val matrix = tensor.unfold(UnfoldDirection.A3).matrix
+    val matrix = tensor.unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].matrix
     val newTensor = DistributedTensor.fold(matrix, UnfoldDirection.A3, tensor.numRows,
       tensor.numCols, tensor.numLayers).asInstanceOf[DistributedTensor]
     checkTensor(newTensor, tensor)

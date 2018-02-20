@@ -123,9 +123,12 @@ class DistributedTensor(
     val unfoldingA2 = unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult].matrix
     val unfoldingA3 = unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].matrix
 
-    val svd1 = DistributedTensor.computeSVD(unfoldingA1, k1, level = StorageLevel.MEMORY_AND_DISK)
-    val svd2 = DistributedTensor.computeSVD(unfoldingA2, k2, level = StorageLevel.MEMORY_AND_DISK)
-    val svd3 = DistributedTensor.computeSVD(unfoldingA3, k3, level = StorageLevel.MEMORY_AND_DISK)
+    val svd1 = DistributedTensor.computeSVD(unfoldingA1, k1,
+      level = StorageLevel.MEMORY_AND_DISK, computeU = true, computeV = false)
+    val svd2 = DistributedTensor.computeSVD(unfoldingA2, k2,
+      level = StorageLevel.MEMORY_AND_DISK, computeU = true, computeV = false)
+    val svd3 = DistributedTensor.computeSVD(unfoldingA3, k3,
+      level = StorageLevel.MEMORY_AND_DISK, computeU = true, computeV = false)
 
     val U1 = svd1.U.toBlockMatrix.transpose
     val mult1 = U1.multiply(unfoldingA1.toBlockMatrix)
@@ -153,7 +156,8 @@ class DistributedTensor(
       k: Int,
       direction: UnfoldDirection.Value): SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
     val matrix = unfold(direction).asInstanceOf[DistributedUnfoldResult].matrix
-    DistributedTensor.computeSVD(matrix, k, level = StorageLevel.MEMORY_AND_DISK)
+    DistributedTensor.computeSVD(matrix, k,
+      level = StorageLevel.MEMORY_AND_DISK, computeU = true, computeV = true)
   }
 }
 
@@ -229,41 +233,60 @@ object DistributedTensor extends TensorLike {
     new DistributedTensor(rdd, rows, cols, layers)
   }
 
-  def computeSVD(
+  private[hosvd] def computeSVD(
       matrix: CoordinateMatrix,
       k: Int,
       level: StorageLevel,
-      rCond: Double = 1e-9):
+      rCond: Double = 1e-9,
+      computeU: Boolean = false,
+      computeV: Boolean = false):
     SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
 
     val sc = matrix.entries.sparkContext
 
-    // whether or not input matrix is transposed
+    // whether or not input matrix should be transposed for SVD
     val transposed = matrix.numCols() > matrix.numRows()
+    val extractU = computeU && !transposed || computeV && transposed
 
     val irm = (if (transposed) matrix.transpose else matrix).toIndexedRowMatrix
     irm.rows.persist(level)
-    val svd = irm.computeSVD(k, computeU = true, rCond = rCond)
-    val uarr = svd.U.rows.collect()
-    val urows = uarr.length
-    val ucols = uarr.head.vector.size
-    irm.rows.unpersist()
+    val svd = irm.computeSVD(k, computeU = extractU, rCond = rCond)
 
-    if (transposed) {
-      val U = new DenseMatrix(urows, ucols, uarr.flatMap { _.vector.toArray }, true)
-      val s = svd.s
-      val V = svd.V.transpose
-      val vrows = V.numRows
-      val vcols = V.numCols
-
-      val rows = V.toArray.sliding(vrows, vrows).
-        zipWithIndex.
-        map { case (arr, row) => IndexedRow(row, Vectors.dense(arr)) }.toSeq
-      val vmat = new IndexedRowMatrix(sc.parallelize(rows), vcols, vrows)
-      SingularValueDecomposition(vmat, svd.s, U)
+    // collect values for matrix U for the following conditions
+    val (uarr, urows, ucols) = if (extractU) {
+      val arr = svd.U.rows.collect()
+      (arr, arr.length, arr.head.vector.size)
     } else {
-      val U = new IndexedRowMatrix(sc.parallelize(uarr), urows, ucols)
-      SingularValueDecomposition(U, svd.s, svd.V)
+      (null, -1, -1)
     }
+
+    val umat = if (computeU) {
+      if (transposed) {
+        val V = svd.V.transpose
+        val vrows = V.numRows
+        val vcols = V.numCols
+
+        val rows = V.toArray.sliding(vrows, vrows).
+          zipWithIndex.
+          map { case (arr, row) => IndexedRow(row, Vectors.dense(arr)) }.toSeq
+        new IndexedRowMatrix(sc.parallelize(rows), vcols, vrows)
+      } else {
+        new IndexedRowMatrix(sc.parallelize(uarr), urows, ucols)
+      }
+    } else {
+      null
+    }
+
+    val vmat = if (computeV) {
+      if (transposed) {
+        new DenseMatrix(urows, ucols, uarr.flatMap { _.vector.toArray }, true)
+      } else {
+        svd.V
+      }
+    } else {
+      null
+    }
+
+    SingularValueDecomposition(umat, svd.s, vmat)
   }
 }

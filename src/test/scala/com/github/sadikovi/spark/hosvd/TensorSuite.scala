@@ -365,4 +365,38 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
     assert(svd.U.numRows == 4 && svd.U.numCols == 4)
     assert(svd.V.numRows == 6 && svd.V.numCols == 4)
   }
+
+  test("Distributed tensor - computeSVD, enable U or V") {
+    import DistributedTensor._
+    val tensor = rand(spark, 40, 7, 5)
+    // transposed = false
+    var matrix = tensor.unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult].matrix
+
+    var svd = computeSVD(matrix, 5, StorageLevel.NONE, computeU = true, computeV = true)
+    assert(svd.U != null && svd.V != null)
+
+    svd = computeSVD(matrix, 5, StorageLevel.NONE, computeU = true, computeV = false)
+    assert(svd.U != null && svd.V == null)
+
+    svd = computeSVD(matrix, 5, StorageLevel.NONE, computeU = false, computeV = true)
+    assert(svd.U == null && svd.V != null)
+
+    svd = computeSVD(matrix, 5, StorageLevel.NONE, computeU = false, computeV = false)
+    assert(svd.U == null && svd.V == null)
+
+    // transposed = true
+    matrix = tensor.unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].matrix
+
+    svd = computeSVD(matrix, 5, StorageLevel.NONE, computeU = true, computeV = true)
+    assert(svd.U != null && svd.V != null)
+
+    svd = computeSVD(matrix, 5, StorageLevel.NONE, computeU = true, computeV = false)
+    assert(svd.U != null && svd.V == null)
+
+    svd = computeSVD(matrix, 5, StorageLevel.NONE, computeU = false, computeV = true)
+    assert(svd.U == null && svd.V != null)
+
+    svd = computeSVD(matrix, 5, StorageLevel.NONE, computeU = false, computeV = false)
+    assert(svd.U == null && svd.V == null)
+  }
 }

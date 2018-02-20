@@ -127,8 +127,8 @@ trait TestBase extends Matchers {
       sys.error(s"Tensor dimensions of $tensor do not match expected $expected")
     }
 
-    val entries = tensor.entries.collect.sortBy(_.hashCode).toSeq
-    val expectedEntries = expected.entries.collect.sortBy(_.hashCode).toSeq
+    val entries = tensor.tensorEntries.collect.sortBy(_.hashCode).toSeq
+    val expectedEntries = expected.tensorEntries.collect.sortBy(_.hashCode).toSeq
 
     val msg = s"""
     > Tensor does not equal expected tensor.
@@ -150,8 +150,8 @@ trait TestBase extends Matchers {
       sys.error(s"Tensor dimensions of $tensor do not match expected $expected")
     }
 
-    val entries = tensor.entries.collect.sortBy(_.hashCode).toSeq
-    val expectedEntries = expected.entries.collect.sortBy(_.hashCode).toSeq
+    val entries = tensor.tensorEntries.collect.sortBy(_.hashCode).toSeq
+    val expectedEntries = expected.tensorEntries.collect.sortBy(_.hashCode).toSeq
 
     entries.foreach { entry =>
       val value1 = entry.value

@@ -86,24 +86,3 @@ abstract class Tensor extends Serializable {
     s"${getClass.getSimpleName}[$numRows x $numCols x $numLayers]"
   }
 }
-
-/**
- * Trait [[TensorLike]] for companion objects to create new tensor.
- */
-trait TensorLike {
-  /**
-   * Fold matrix by provided direction into tensor.
-   * Dimensions are specified must be checked against actual matrix size and direction.
-   * @param matrix matrix to fold
-   * @param direction direction to fold (usually direction of unfolding for matrix)
-   * @param rows number of rows for created tensor
-   * @param cols number of columns for created tensor
-   * @param layers number of layers for created tensor
-   */
-  def fold(
-      matrix: CoordinateMatrix,
-      direction: UnfoldDirection.Value,
-      rows: Int,
-      cols: Int,
-      layers: Int): Tensor
-}

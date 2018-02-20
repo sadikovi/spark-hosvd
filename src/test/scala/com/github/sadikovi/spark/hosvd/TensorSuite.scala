@@ -18,43 +18,46 @@ package com.github.sadikovi.spark.hosvd
 
 import breeze.linalg.{DenseMatrix => BDM, _}
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Dataset
 import org.apache.spark.storage.StorageLevel
 
 import com.github.sadikovi.spark.hosvd.test.{UnitTestSuite, SparkLocal}
 
 class TensorSuite extends UnitTestSuite with SparkLocal {
   // test data for simple unfolding
-  private var rdd: RDD[TensorEntry] = null
+  private var data: Dataset[TensorEntry] = null
 
   override def beforeAll() {
     startSparkSession()
-    rdd = sc.parallelize(
-      TensorEntry(0, 0, 0, 0.0 + 111) ::
-      TensorEntry(0, 1, 0, 10.0 + 111) ::
-      TensorEntry(0, 2, 0, 20.0 + 111) ::
-      TensorEntry(1, 0, 0, 100.0 + 111) ::
-      TensorEntry(1, 1, 0, 110.0 + 111) ::
-      TensorEntry(1, 2, 0, 120.0 + 111) ::
-      TensorEntry(2, 0, 0, 200.0 + 111) ::
-      TensorEntry(2, 1, 0, 210.0 + 111) ::
-      TensorEntry(2, 2, 0, 220.0 + 111) ::
-      TensorEntry(3, 0, 0, 300.0 + 111) ::
-      TensorEntry(3, 1, 0, 310.0 + 111) ::
-      TensorEntry(3, 2, 0, 320.0 + 111) ::
-      TensorEntry(0, 0, 1, 1.0 + 111) ::
-      TensorEntry(0, 1, 1, 11.0 + 111) ::
-      TensorEntry(0, 2, 1, 21.0 + 111) ::
-      TensorEntry(1, 0, 1, 101.0 + 111) ::
-      TensorEntry(1, 1, 1, 111.0 + 111) ::
-      TensorEntry(1, 2, 1, 121.0 + 111) ::
-      TensorEntry(2, 0, 1, 201.0 + 111) ::
-      TensorEntry(2, 1, 1, 211.0 + 111) ::
-      TensorEntry(2, 2, 1, 221.0 + 111) ::
-      TensorEntry(3, 0, 1, 301.0 + 111) ::
-      TensorEntry(3, 1, 1, 311.0 + 111) ::
-      TensorEntry(3, 2, 1, 321.0 + 111) ::
-      Nil)
+    val implicits = spark.implicits
+    import implicits._
+
+    data = Seq(
+      TensorEntry(0, 0, 0, 0.0 + 111),
+      TensorEntry(0, 1, 0, 10.0 + 111),
+      TensorEntry(0, 2, 0, 20.0 + 111),
+      TensorEntry(1, 0, 0, 100.0 + 111),
+      TensorEntry(1, 1, 0, 110.0 + 111),
+      TensorEntry(1, 2, 0, 120.0 + 111),
+      TensorEntry(2, 0, 0, 200.0 + 111),
+      TensorEntry(2, 1, 0, 210.0 + 111),
+      TensorEntry(2, 2, 0, 220.0 + 111),
+      TensorEntry(3, 0, 0, 300.0 + 111),
+      TensorEntry(3, 1, 0, 310.0 + 111),
+      TensorEntry(3, 2, 0, 320.0 + 111),
+      TensorEntry(0, 0, 1, 1.0 + 111),
+      TensorEntry(0, 1, 1, 11.0 + 111),
+      TensorEntry(0, 2, 1, 21.0 + 111),
+      TensorEntry(1, 0, 1, 101.0 + 111),
+      TensorEntry(1, 1, 1, 111.0 + 111),
+      TensorEntry(1, 2, 1, 121.0 + 111),
+      TensorEntry(2, 0, 1, 201.0 + 111),
+      TensorEntry(2, 1, 1, 211.0 + 111),
+      TensorEntry(2, 2, 1, 221.0 + 111),
+      TensorEntry(3, 0, 1, 301.0 + 111),
+      TensorEntry(3, 1, 1, 311.0 + 111),
+      TensorEntry(3, 2, 1, 321.0 + 111)
+    ).toDS
   }
 
   override def afterAll() {
@@ -81,38 +84,61 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
   }
 
   test("DistributedTensor - string repr") {
-    val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
+    val implicits = spark.implicits
+    import implicits._
+
+    val entries = Seq(TensorEntry(0, 0, 0, 1.0)).toDS
     val tensor = new DistributedTensor(entries, 4, 3, 2)
     tensor.toString should be ("DistributedTensor[4 x 3 x 2]")
   }
 
   test("Distributed tensor - use provided dimensions") {
-    val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
+    val implicits = spark.implicits
+    import implicits._
+
+    val entries = Seq(TensorEntry(0, 0, 0, 1.0)).toDS
     val tensor = new DistributedTensor(entries, 4, 3, 2)
     tensor.numRows should be (4)
     tensor.numCols should be (3)
     tensor.numLayers should be (2)
   }
 
-  test("Distributed tensor - compute dimensions") {
-    val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
+  test("Distributed tensor - use provided dimensions 2") {
+    val implicits = spark.implicits
+    import implicits._
+
+    val entries = Seq(TensorEntry(0, 0, 0, 1.0)).toDS
     val tensor = new DistributedTensor(entries, 0, 0, 0)
+    tensor.numRows should be (0)
+    tensor.numCols should be (0)
+    tensor.numLayers should be (0)
+  }
+
+  test("Distributed tensor - compute dimensions") {
+    val implicits = spark.implicits
+    import implicits._
+
+    val entries = Seq(TensorEntry(0, 0, 0, 1.0)).toDS
+    val tensor = new DistributedTensor(entries, -1, -1, -1)
     tensor.numRows should be (1)
     tensor.numCols should be (1)
     tensor.numLayers should be (1)
   }
 
   test("Distributed tensor - persist entries") {
-    val entries = sc.parallelize(TensorEntry(0, 0, 0, 1.0) :: Nil)
-    entries.getStorageLevel should be (StorageLevel.NONE)
+    val implicits = spark.implicits
+    import implicits._
+
+    val entries = Seq(TensorEntry(0, 0, 0, 1.0)).toDS
     val tensor = new DistributedTensor(entries, 0, 0, 0)
+    tensor.tensorEntries.storageLevel should be (StorageLevel.NONE)
     tensor.persist()
-    tensor.entries.getStorageLevel should be (StorageLevel.MEMORY_AND_DISK)
+    tensor.tensorEntries.storageLevel should be (StorageLevel.MEMORY_AND_DISK)
     tensor.unpersist()
   }
 
   test("Distributed tensor - unfold A1") {
-    val tensor = new DistributedTensor(rdd)
+    val tensor = new DistributedTensor(data)
     val result = tensor.unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult]
     result.isLocal should be (false)
     val expected = BDM(
@@ -125,7 +151,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
   }
 
   test("Distributed tensor - unfold A2") {
-    val tensor = new DistributedTensor(rdd)
+    val tensor = new DistributedTensor(data)
     val result = tensor.unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult]
     result.isLocal should be (false)
     val expected = BDM(
@@ -137,7 +163,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
   }
 
   test("Distributed tensor - unfold A3") {
-    val tensor = new DistributedTensor(rdd)
+    val tensor = new DistributedTensor(data)
     val result = tensor.unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult]
     result.isLocal should be (false)
     val expected = BDM(
@@ -148,7 +174,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
   }
 
   test("Distributed tensor - invalid unfolding direction") {
-    val tensor = new DistributedTensor(rdd)
+    val tensor = new DistributedTensor(data)
     intercept[IllegalArgumentException] {
       tensor.unfold(null)
     }
@@ -160,17 +186,17 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
       (1.0, 2.0, 3.0)))
 
     val exc1 = intercept[IllegalArgumentException] {
-      DistributedTensor.fold(matrix, UnfoldDirection.A1, 10, 6, 10)
+      DistributedTensor.fold(spark, matrix, UnfoldDirection.A1, 10, 6, 10)
     }
     exc1.getMessage.startsWith("Failed to match dimensions") should be (true)
 
     val exc2 = intercept[IllegalArgumentException] {
-      DistributedTensor.fold(matrix, UnfoldDirection.A2, 6, 10, 10)
+      DistributedTensor.fold(spark, matrix, UnfoldDirection.A2, 6, 10, 10)
     }
     exc2.getMessage.startsWith("Failed to match dimensions") should be (true)
 
     val exc3 = intercept[IllegalArgumentException] {
-      DistributedTensor.fold(matrix, UnfoldDirection.A3, 10, 10, 6)
+      DistributedTensor.fold(spark, matrix, UnfoldDirection.A3, 10, 10, 6)
     }
     exc3.getMessage.startsWith("Failed to match dimensions") should be (true)
   }
@@ -181,8 +207,8 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
       (211.0, 221.0, 231.0, 212.0, 222.0, 232.0),
       (311.0, 321.0, 331.0, 312.0, 322.0, 332.0),
       (411.0, 421.0, 431.0, 412.0, 422.0, 432.0)))
-    val tensor = DistributedTensor.fold(matrix, UnfoldDirection.A1, 4, 3, 2)
-    checkTensor(tensor.asInstanceOf[DistributedTensor], new DistributedTensor(rdd))
+    val tensor = DistributedTensor.fold(spark, matrix, UnfoldDirection.A1, 4, 3, 2)
+    checkTensor(tensor.asInstanceOf[DistributedTensor], new DistributedTensor(data))
   }
 
   test("Distributed tensor - fold A2") {
@@ -190,58 +216,64 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
       (111.0, 112.0, 211.0, 212.0, 311.0, 312.0, 411.0, 412.0),
       (121.0, 122.0, 221.0, 222.0, 321.0, 322.0, 421.0, 422.0),
       (131.0, 132.0, 231.0, 232.0, 331.0, 332.0, 431.0, 432.0)))
-    val tensor = DistributedTensor.fold(matrix, UnfoldDirection.A2, 4, 3, 2)
-    checkTensor(tensor.asInstanceOf[DistributedTensor], new DistributedTensor(rdd))
+    val tensor = DistributedTensor.fold(spark, matrix, UnfoldDirection.A2, 4, 3, 2)
+    checkTensor(tensor.asInstanceOf[DistributedTensor], new DistributedTensor(data))
   }
 
   test("Distributed tensor - fold A3") {
     val matrix = toCoordinateMatrix(sc, BDM(
       (111.0, 211.0, 311.0, 411.0, 121.0, 221.0, 321.0, 421.0, 131.0, 231.0, 331.0, 431.0),
       (112.0, 212.0, 312.0, 412.0, 122.0, 222.0, 322.0, 422.0, 132.0, 232.0, 332.0, 432.0)))
-    val tensor = DistributedTensor.fold(matrix, UnfoldDirection.A3, 4, 3, 2)
-    checkTensor(tensor.asInstanceOf[DistributedTensor], new DistributedTensor(rdd))
+    val tensor = DistributedTensor.fold(spark, matrix, UnfoldDirection.A3, 4, 3, 2)
+    checkTensor(tensor.asInstanceOf[DistributedTensor], new DistributedTensor(data))
   }
 
   test("Distributed tensor - unfold -> fold (A1)") {
-    val tensor = new DistributedTensor(rdd)
+    val tensor = new DistributedTensor(data)
     val matrix = tensor.unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult].matrix
-    val newTensor = DistributedTensor.fold(matrix, UnfoldDirection.A1, tensor.numRows,
+    val newTensor = DistributedTensor.fold(spark, matrix, UnfoldDirection.A1, tensor.numRows,
       tensor.numCols, tensor.numLayers).asInstanceOf[DistributedTensor]
     checkTensor(newTensor, tensor)
   }
 
   test("Distributed tensor - unfold -> fold (A2)") {
-    val tensor = new DistributedTensor(rdd)
+    val tensor = new DistributedTensor(data)
     val matrix = tensor.unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult].matrix
-    val newTensor = DistributedTensor.fold(matrix, UnfoldDirection.A2, tensor.numRows,
+    val newTensor = DistributedTensor.fold(spark, matrix, UnfoldDirection.A2, tensor.numRows,
       tensor.numCols, tensor.numLayers).asInstanceOf[DistributedTensor]
     checkTensor(newTensor, tensor)
   }
 
   test("Distributed tensor - unfold -> fold (A3)") {
-    val tensor = new DistributedTensor(rdd)
+    val tensor = new DistributedTensor(data)
     val matrix = tensor.unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].matrix
-    val newTensor = DistributedTensor.fold(matrix, UnfoldDirection.A3, tensor.numRows,
+    val newTensor = DistributedTensor.fold(spark, matrix, UnfoldDirection.A3, tensor.numRows,
       tensor.numCols, tensor.numLayers).asInstanceOf[DistributedTensor]
     checkTensor(newTensor, tensor)
   }
 
   test("Distributed tensor - hosvd") {
-    val tensor = new DistributedTensor(rdd)
+    val implicits = spark.implicits
+    import implicits._
+
+    val tensor = new DistributedTensor(data)
     val ho = tensor.hosvd(2, 2, 2).asInstanceOf[DistributedTensor]
-    val expected = new DistributedTensor(sc.parallelize(
-      TensorEntry(0, 0, 0, -1438.912) ::
-      TensorEntry(0, 0, 1, 0) ::
-      TensorEntry(1, 0, 0, 0) ::
-      TensorEntry(1, 0, 1, 0.931) ::
-      TensorEntry(0, 1, 0, 0) ::
-      TensorEntry(0, 1, 1, -0.058) ::
-      TensorEntry(1, 1, 0, -15.226) ::
-      TensorEntry(1, 1, 1, -0.048) :: Nil))
+    val expected = new DistributedTensor(Seq(
+      TensorEntry(0, 0, 0, -1438.912),
+      TensorEntry(0, 0, 1, 0),
+      TensorEntry(1, 0, 0, 0),
+      TensorEntry(1, 0, 1, 0.931),
+      TensorEntry(0, 1, 0, 0),
+      TensorEntry(0, 1, 1, -0.058),
+      TensorEntry(1, 1, 0, -15.226),
+      TensorEntry(1, 1, 1, -0.048)).toDS)
     checkTensorApproximate(ho, expected, ignoreSign = true)
   }
 
   test("Distributed tensor - hosvd 2") {
+    val implicits = spark.implicits
+    import implicits._
+
     /*
     Matlab code:
 
@@ -282,7 +314,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
     */
 
     // scalastyle:off
-    val rdd = sc.parallelize(Seq(
+    val entries = Seq(
       TensorEntry(0, 0, 0, 0.5470), TensorEntry(0, 1, 0, 0.1835), TensorEntry(0, 2, 0, 0.9294), TensorEntry(0, 3, 0, 0.3063),
       TensorEntry(1, 0, 0, 0.2963), TensorEntry(1, 1, 0, 0.3685), TensorEntry(1, 2, 0, 0.7757), TensorEntry(1, 3, 0, 0.5085),
       TensorEntry(2, 0, 0, 0.7447), TensorEntry(2, 1, 0, 0.6256), TensorEntry(2, 2, 0, 0.4868), TensorEntry(2, 3, 0, 0.5108),
@@ -306,10 +338,10 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
       TensorEntry(2, 0, 3, 0.8010), TensorEntry(2, 1, 3, 0.5785), TensorEntry(2, 2, 3, 0.5211), TensorEntry(2, 3, 3, 0.3955),
       TensorEntry(3, 0, 3, 0.0292), TensorEntry(3, 1, 3, 0.2373), TensorEntry(3, 2, 3, 0.2316), TensorEntry(3, 3, 3, 0.3674),
       TensorEntry(4, 0, 3, 0.9289), TensorEntry(4, 1, 3, 0.4588), TensorEntry(4, 2, 3, 0.4889), TensorEntry(4, 3, 3, 0.9880)
-    ))
+    ).toDS
     // scalastyle:on
 
-    val tensor = new DistributedTensor(rdd)
+    val tensor = new DistributedTensor(entries)
     val core = tensor.hosvd(3, 3, 3)
 
     checkMatrixAbs(core.getLayer(0), BDM(
@@ -332,7 +364,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
   }
 
   test("Distributed tensor - getLayer") {
-    val tensor = new DistributedTensor(rdd)
+    val tensor = new DistributedTensor(data)
     checkMatrix(tensor.getLayer(0), BDM(
       (111.0, 121.0, 131.0),
       (211.0, 221.0, 231.0),
@@ -360,7 +392,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
   }
 
   test("Distributed tensor - computeSVD") {
-    val tensor = new DistributedTensor(rdd)
+    val tensor = new DistributedTensor(data)
     val svd = tensor.computeSVD(4, UnfoldDirection.A1)
     assert(svd.U.numRows == 4 && svd.U.numCols == 4)
     assert(svd.V.numRows == 6 && svd.V.numCols == 4)

@@ -18,6 +18,7 @@ package com.github.sadikovi.spark.hosvd
 
 import breeze.linalg.{DenseMatrix => BDM, _}
 
+import org.apache.spark.mllib.linalg.distributed.MatrixEntry
 import org.apache.spark.sql.Dataset
 import org.apache.spark.storage.StorageLevel
 
@@ -430,5 +431,41 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
 
     svd = computeSVD(block, 5, StorageLevel.NONE, computeU = false, computeV = false)
     assert(svd.U == null && svd.V == null)
+  }
+
+  test("DistributedTensor - multiply") {
+    val implicits = spark.implicits
+    import implicits._
+
+    val a = Seq(
+      MatrixEntry(0, 0, 0.8147),
+      MatrixEntry(0, 1, 0.9134),
+      MatrixEntry(1, 0, 0.9058),
+      MatrixEntry(1, 1, 0.6324),
+      MatrixEntry(2, 0, 0.1270),
+      MatrixEntry(2, 1, 0.0975)
+    ).toDS
+
+    val b = Seq(
+      MatrixEntry(0, 0, 0.2785),
+      MatrixEntry(0, 1, 0.9575),
+      MatrixEntry(0, 2, 0.1576),
+      MatrixEntry(0, 3, 0.9572),
+      MatrixEntry(1, 0, 0.5469),
+      MatrixEntry(1, 1, 0.9649),
+      MatrixEntry(1, 2, 0.9706),
+      MatrixEntry(1, 3, 0.4854)
+    ).toDS
+
+    val blockA = CoordinateBlock(a, 3, 2)
+    val blockB = CoordinateBlock(b, 2, 4)
+
+    val res = DistributedTensor.multiply(blockA, blockB.toLocalMatrix).toLocalMatrix
+    val exp = BDM(
+      (0.7264, 1.6614, 1.0149, 1.2232),
+      (0.5981, 1.4775, 0.7566, 1.1740),
+      (0.0887, 0.2157, 0.1146, 0.1689)
+    )
+    checkMatrixT(res, exp, 1e-4, false)
   }
 }

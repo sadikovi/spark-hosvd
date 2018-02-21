@@ -17,7 +17,7 @@
 package com.github.sadikovi.spark.hosvd
 
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix, Vectors}
-import org.apache.spark.mllib.linalg.distributed.{IndexedRow, IndexedRowMatrix, MatrixEntry}
+import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, IndexedRow, IndexedRowMatrix, MatrixEntry}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 
@@ -27,12 +27,17 @@ private[hosvd] case class RowStripe(i: Long, cols: Seq[ColumnValue])
 /**
  * Dataset based container for CoordinateMatrix.
  * Implements more efficient conversion methods.
+ *
+ * Code assumes that the max index within data is less than number of rows and number of columns.
+ * In this case it is very similar to the Spark coordinate matrix.
  */
 case class CoordinateBlock(
     @transient val data: Dataset[MatrixEntry],
     numRows: Long,
     numCols: Long) {
   import data.sparkSession.implicits._
+
+  require(numRows >= 0 && numCols >= 0, s"Invalid dimensions, rows: $numRows, cols: $numCols")
 
   def toIndexedRowMatrix(): IndexedRowMatrix = {
     val n = numCols.toInt
@@ -43,6 +48,10 @@ case class CoordinateBlock(
         IndexedRow(row.i, vector)
       }.rdd
     new IndexedRowMatrix(rdd, numRows, n)
+  }
+
+  def toCoordinateMatrix(): CoordinateMatrix = {
+    new CoordinateMatrix(data.rdd, numRows, numCols)
   }
 
   def toLocalMatrix(): Matrix = {

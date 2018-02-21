@@ -33,10 +33,10 @@ case class DistributedUnfoldResult(
   override def direction: UnfoldDirection.Value = unfoldDirection
 }
 
-
 /**
- * [[DistributedTensor]] is an Dataset-based tensor, can be in compressed format similar to
- * CoordinateMatrix class in Spark. Dimensions are lazily computed, if none provided.
+ * [[DistributedTensor]] is an Dataset-based tensor.
+ * Data is stored in compressed format similar to CoordinateMatrix class in Spark.
+ * Dimensions are lazily computed, if none provided.
  */
 class DistributedTensor(
     entries: Dataset[TensorEntry],
@@ -64,7 +64,7 @@ class DistributedTensor(
       data.select(max("i"), max("j"), max("k")).
       as[(Int, Int, Int)].
       first
-    // reassign dimensions
+    // Reassign dimensions
     rows = 1 + imax
     cols = 1 + jmax
     layers = 1 + kmax
@@ -102,6 +102,21 @@ class DistributedTensor(
   }
 
   override def unfold(direction: UnfoldDirection.Value): UnfoldResult = {
+    // Each unfolding is described in terms of swapping coordinates for each entry,
+    // below are the schemas of updating indices for each direction:
+    // ===
+    // A1 -> matrix of dimensions "rows x (layers * cols)":
+    //  i: i
+    //  j: j + cols * k
+    // ===
+    // A2 -> matrix of dimensions "cols x (rows * layers)":
+    //  i: j
+    //  j: k + layers * i
+    // ===
+    // A3 -> matrix of dimensions "layers x (cols * rows)":
+    //  i: k
+    //  j: i + rows * j
+
     val block = direction match {
       case UnfoldDirection.A1 =>
         val ds = data.
@@ -151,7 +166,14 @@ class DistributedTensor(
       level = StorageLevel.MEMORY_AND_DISK, computeU = true, computeV = false)
 
     // We optimize matrix multiplication for HOSVD.
-    // TODO: describe the changes
+    // Normally you would see multiplication for each folding that looks like this:
+    // U.T x Ax, where
+    // - U.T is transposed left singular vectors from SVD result
+    // - Ax is a tensor unfolding x
+    // It is faster to perform the following:
+    // (Ax.T x U).T, where
+    // - Ax.T is transposed unfolding
+    // - U is left singular vectors
 
     val U1 = svd1.U
     val mat1 = unfoldingA1
@@ -224,7 +246,23 @@ object DistributedTensor {
       layers: Int): Tensor = {
     import block.data.sparkSession.implicits._
 
-    // TODO: describe folding operations and changes
+    // To fold a matrix into a tensor, we need to perform the following coordinate remapping.
+    // Each matrix element has (I, J) coordinates, each tensor element will have (i, j, k).
+    // ===
+    // A1 -> matrix.rows == rows and matrix.cols == cols * layers
+    //  i: I
+    //  j: J % cols
+    //  k: (J - j) / cols
+    // ===
+    // A2 -> matrix.rows == cols and matrix.cols == rows * layers
+    //  j: I
+    //  k: J % layers
+    //  i: (J - k) / cols
+    // ===
+    // A3 -> matrix.rows == layers and matrix.cols == cols * rows
+    //  i: J % rows
+    //  j: (J - i) / rows
+    //  k: I
 
     val ds = direction match {
       case UnfoldDirection.A1 =>
@@ -263,6 +301,12 @@ object DistributedTensor {
     new DistributedTensor(ds, rows, cols, layers)
   }
 
+  /**
+   * Optimized method to compute SVD.
+   * Based on selection of U and V, we either partially compute singular vectors or omit them.
+   * Also matrix is transposed internally if number of columns is greater than number of rows
+   * to speed up computation.
+   */
   private[hosvd] def computeSVD(
       block: CoordinateBlock,
       k: Int,
@@ -272,7 +316,7 @@ object DistributedTensor {
       computeV: Boolean = false):
     SingularValueDecomposition[Matrix, Matrix] = {
 
-    // whether or not input matrix should be transposed for SVD
+    // Whether or not input matrix should be transposed for SVD
     val transposed = block.numCols > block.numRows
     val extractU = computeU && !transposed || computeV && transposed
 
@@ -280,7 +324,7 @@ object DistributedTensor {
     irm.rows.persist(level)
     val svd = irm.computeSVD(k, computeU = extractU, rCond = rCond)
 
-    // collect values for matrix U for the following conditions
+    // Collect values for matrix U for the following conditions
     val (uarr, urows, ucols) = if (extractU) {
       val arr = svd.U.rows.collect()
       (arr, arr.length, arr.head.vector.size)

@@ -41,6 +41,8 @@ scalacOptions in ThisBuild ++= Seq("-unchecked", "-deprecation", "-feature")
 testOptions in Test += Tests.Argument("-oF")
 
 parallelExecution in Test := false
+fork in Test := true // to run tests in a separate JVM
+javaOptions += "-Xmx4G" // increase maximum heap size for forked processes
 
 // Skip tests during assembly
 test in assembly := {}

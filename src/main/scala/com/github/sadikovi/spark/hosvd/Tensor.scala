@@ -16,7 +16,7 @@
 
 package com.github.sadikovi.spark.hosvd
 
-import org.apache.spark.mllib.linalg.{Matrix, SingularValueDecomposition}
+import org.apache.spark.mllib.linalg.{Matrix, SingularValueDecomposition, Vector}
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, IndexedRowMatrix}
 
 /** Tensor entry for 'i' row, 'j' column and 'k' layer with value 'value' */
@@ -38,6 +38,20 @@ case class TensorEntry(i: Int, j: Int, k: Int, value: Double) {
   override def toString: String = {
     s"[($i, $j, $k) -> $value]"
   }
+}
+
+/**
+ * Class to store result of high order singular value decomposition.
+ */
+abstract class HOSVD {
+  /** Return core tensor */
+  def coreTensor: Tensor
+
+  /** Return left singular vectors matrix (U) for a specified direction A1, A2, or A3 */
+  def leftSingularVectors(direction: UnfoldDirection.Value): Matrix
+
+  /** Return vector of singular values for a specified direction A1, A2 or A3 */
+  def singularValues(direction: UnfoldDirection.Value): Vector
 }
 
 /**
@@ -68,9 +82,9 @@ abstract class Tensor extends Serializable {
    * @param k1 number of singular values to keep for unfolding A1
    * @param k2 number of singular values to keep for unfolding A2
    * @param k3 number of singular values to keep for unfolding A3
-   * @return core tensor
+   * @return high order SVD result (core tensor, left singular vectors and singular values)
    */
-  def hosvd(k1: Int, k2: Int, k3: Int): Tensor
+  def hosvd(k1: Int, k2: Int, k3: Int): HOSVD
 
   /**
    * Unfold by specified direction and compute svd on the unfolding.
@@ -78,9 +92,8 @@ abstract class Tensor extends Serializable {
    * @param direction unfolding direction
    * @return singular value decomposition
    */
-  def computeSVD(
-      k: Int,
-      direction: UnfoldDirection.Value): SingularValueDecomposition[Matrix, Matrix]
+  def computeSVD(k: Int, direction: UnfoldDirection.Value):
+      SingularValueDecomposition[Matrix, Matrix]
 
   override def toString(): String = {
     s"${getClass.getSimpleName}[$numRows x $numCols x $numLayers]"

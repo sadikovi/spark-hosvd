@@ -33,6 +33,34 @@ case class DistributedUnfoldResult(
   override def direction: UnfoldDirection.Value = unfoldDirection
 }
 
+case class DistributedHOSVD(
+    private val tensor: Tensor,
+    private val u: Seq[Matrix],
+    private val s: Seq[Vector])
+  extends HOSVD {
+
+  require(u.length == 3, s"Expected 3 matrices, found ${u.length}")
+  require(s.length == 3, s"Expected 3 vectors, found ${s.length}")
+
+  override def coreTensor: Tensor = tensor
+
+  override def leftSingularVectors(direction: UnfoldDirection.Value): Matrix = {
+    direction match {
+      case UnfoldDirection.A1 => u(0)
+      case UnfoldDirection.A2 => u(1)
+      case UnfoldDirection.A3 => u(2)
+    }
+  }
+
+  override def singularValues(direction: UnfoldDirection.Value): Vector = {
+    direction match {
+      case UnfoldDirection.A1 => s(0)
+      case UnfoldDirection.A2 => s(1)
+      case UnfoldDirection.A3 => s(2)
+    }
+  }
+}
+
 /**
  * [[DistributedTensor]] is an Dataset-based tensor.
  * Data is stored in compressed format similar to CoordinateMatrix class in Spark.
@@ -133,8 +161,6 @@ class DistributedTensor(
           select(col("k").as("i"), (col("i") + lit(numRows) * col("j")).as("j"), col("value")).
           as[MatrixEntry]
         CoordinateBlock(ds, numLayers, numCols * numRows)
-      case otherMode =>
-        throw new IllegalArgumentException(s"Unrecognized unfolding mode $otherMode")
     }
     DistributedUnfoldResult(block, direction)
   }
@@ -151,7 +177,7 @@ class DistributedTensor(
     data.unpersist()
   }
 
-  override def hosvd(k1: Int, k2: Int, k3: Int): Tensor = {
+  override def hosvd(k1: Int, k2: Int, k3: Int): HOSVD = {
     persist()
 
     val unfoldingA1 = unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult].block
@@ -195,7 +221,7 @@ class DistributedTensor(
 
     unpersist()
 
-    tensor3
+    new DistributedHOSVD(tensor3, Seq(svd1.U, svd2.U, svd3.U), Seq(svd1.s, svd2.s, svd3.s))
   }
 
   override def computeSVD(
@@ -295,8 +321,6 @@ object DistributedTensor {
           col("i").cast("int").as("k"),
           col("value")
         ).as[TensorEntry]
-      case otherMode =>
-        throw new IllegalArgumentException(s"Unrecognized unfolding mode $otherMode")
     }
     new DistributedTensor(ds, rows, cols, layers)
   }

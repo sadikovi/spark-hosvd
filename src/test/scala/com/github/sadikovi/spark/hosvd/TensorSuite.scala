@@ -18,6 +18,7 @@ package com.github.sadikovi.spark.hosvd
 
 import breeze.linalg.{DenseMatrix => BDM, _}
 
+import org.apache.spark.mllib.linalg.DenseMatrix
 import org.apache.spark.mllib.linalg.distributed.MatrixEntry
 import org.apache.spark.sql.Dataset
 import org.apache.spark.storage.StorageLevel
@@ -176,7 +177,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
 
   test("Distributed tensor - invalid unfolding direction") {
     val tensor = new DistributedTensor(data)
-    intercept[IllegalArgumentException] {
+    intercept[MatchError] {
       tensor.unfold(null)
     }
   }
@@ -258,7 +259,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
     import implicits._
 
     val tensor = new DistributedTensor(data)
-    val ho = tensor.hosvd(2, 2, 2).asInstanceOf[DistributedTensor]
+    val ho = tensor.hosvd(2, 2, 2).coreTensor.asInstanceOf[DistributedTensor]
     val expected = new DistributedTensor(Seq(
       TensorEntry(0, 0, 0, -1438.912),
       TensorEntry(0, 0, 1, 0),
@@ -343,8 +344,10 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
     // scalastyle:on
 
     val tensor = new DistributedTensor(entries)
-    val core = tensor.hosvd(3, 3, 3)
+    val res = tensor.hosvd(3, 3, 3)
+    val core = res.coreTensor
 
+    // check core tensor
     checkMatrixAbs(core.getLayer(0), BDM(
       (-4.46399611738112, 0.0401457449506178, 0.0476955115397744),
       (0.0653100349599707, 0.493191023130688, -0.731872604065162),
@@ -361,6 +364,50 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
       (0.0572370577534474, -0.0763782788051653, 0.168214618855026),
       (-0.0254492600341017, 0.539793831216911, -0.211410567549553),
       (0.268158537616755, 0.506546738132916, 0.363850227887210)
+    ))
+
+    // check left singular vectors
+    val u1 = res.leftSingularVectors(UnfoldDirection.A1)
+    checkMatrixAbs(u1, BDM(
+      (-0.485965038110453, -0.661363074504828, 0.404363991476708),
+      (-0.441369339989566, -0.0520181309708688, 0.238566626233376),
+      (-0.444846773918030, 0.170066428781170, -0.449239799718779),
+      (-0.342724643627288, -0.231405876401135, -0.707148021787248),
+      (-0.503668793788884, 0.690957110029604, 0.278748999775178)
+    ))
+    val u2 = res.leftSingularVectors(UnfoldDirection.A2)
+    checkMatrixAbs(u2, BDM(
+      (-0.512790267641945, -0.756073526466873, 0.298270390933075),
+      (-0.519363411960773, -0.0508532352178608, -0.826647540066221),
+      (-0.511686513062042, 0.614220144109088, 0.134571749658377),
+      (-0.453304202582081, 0.220228030946190, 0.457798058743132)
+    ))
+    val u3 = res.leftSingularVectors(UnfoldDirection.A3)
+    checkMatrixAbs(u3, BDM(
+      (-0.523590727665897, -0.534456270626436, 0.360828450780812),
+      (-0.467409170523832, 0.724259665241362, 0.502110625774689),
+      (-0.459099881671587, 0.273986781418517, -0.776160785272608),
+      (-0.544617954039027, -0.338726550037748, -0.123540212061815)
+    ))
+
+    // check singular values
+    val sv1 = res.singularValues(UnfoldDirection.A1)
+    checkMatrix(new DenseMatrix(sv1.size, 1, sv1.toArray), BDM(
+      4.56671981421963,
+      1.31738444605424,
+      1.10352324584210
+    ))
+    val sv2 = res.singularValues(UnfoldDirection.A2)
+    checkMatrix(new DenseMatrix(sv2.size, 1, sv2.toArray), BDM(
+      4.51501646906673,
+      1.37441197277310,
+      1.26515219424008
+    ))
+    val sv3 = res.singularValues(UnfoldDirection.A3)
+    checkMatrix(new DenseMatrix(sv3.size, 1, sv3.toArray), BDM(
+      4.59467456668543,
+      1.29046968861424,
+      1.09099550530752
     ))
   }
 
@@ -386,7 +433,7 @@ class TensorSuite extends UnitTestSuite with SparkLocal {
 
   test("Distributed tensor - rand, hosvd") {
     val tensor = DistributedTensor.rand(spark, 10, 8, 4)
-    val core = tensor.hosvd(7, 3, 2)
+    val core = tensor.hosvd(7, 3, 2).coreTensor
     assert(core.numRows === 7)
     assert(core.numCols === 3)
     assert(core.numLayers === 2)

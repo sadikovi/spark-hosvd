@@ -23,11 +23,11 @@ import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.Matrix
 import org.apache.spark.mllib.linalg.distributed.{CoordinateMatrix, MatrixEntry}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 import org.scalatest._
 
-import com.github.sadikovi.spark.hosvd.DistributedTensor
+import com.github.sadikovi.spark.hosvd.{CoordinateBlock, DistributedTensor}
 
 trait TestBase extends Matchers {
   /** Compare two DataFrame objects */
@@ -55,6 +55,13 @@ trait TestBase extends Matchers {
       buffer.append(MatrixEntry(i, j, matrix(i, j)))
     }
     new CoordinateMatrix(sc.parallelize(buffer.toSeq))
+  }
+
+  /** Convert DenseMatrix into CoordinateBlock */
+  protected def toCoordinateBlock(spark: SparkSession, matrix: BDM[Double]): CoordinateBlock = {
+    import spark.implicits._
+    val cm = toCoordinateMatrix(spark.sparkContext, matrix)
+    CoordinateBlock(cm.entries.toDS, cm.numRows, cm.numCols)
   }
 
   /** Compare CoordinateMatrix to expected DenseMatrix */

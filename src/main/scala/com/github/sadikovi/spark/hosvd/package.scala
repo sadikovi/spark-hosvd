@@ -16,8 +16,6 @@
 
 package com.github.sadikovi.spark.hosvd
 
-import org.apache.spark.mllib.linalg.distributed.CoordinateMatrix
-
 /** Direction to unfold tensor */
 object UnfoldDirection extends Enumeration {
   type UnfoldDirection = Value
@@ -31,15 +29,4 @@ abstract class UnfoldResult {
 
   /** Direction used for this unfolding */
   def direction: UnfoldDirection.Value
-}
-
-/** Unfold result for [[DistributedTensor]] */
-private[hosvd] case class DistributedUnfoldResult(
-    @transient matrix: CoordinateMatrix,
-    private val unfoldDirection: UnfoldDirection.Value)
-  extends UnfoldResult {
-
-  override def isLocal: Boolean = false
-
-  override def direction: UnfoldDirection.Value = unfoldDirection
 }

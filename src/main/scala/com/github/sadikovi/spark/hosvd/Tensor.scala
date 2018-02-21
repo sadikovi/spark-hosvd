@@ -80,7 +80,7 @@ abstract class Tensor extends Serializable {
    */
   def computeSVD(
       k: Int,
-      direction: UnfoldDirection.Value): SingularValueDecomposition[IndexedRowMatrix, Matrix]
+      direction: UnfoldDirection.Value): SingularValueDecomposition[Matrix, Matrix]
 
   override def toString(): String = {
     s"${getClass.getSimpleName}[$numRows x $numCols x $numLayers]"

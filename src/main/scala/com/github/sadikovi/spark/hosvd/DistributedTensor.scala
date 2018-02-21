@@ -22,6 +22,18 @@ import org.apache.spark.sql.{Dataset, DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 
+/** Unfold result for [[DistributedTensor]] */
+case class DistributedUnfoldResult(
+    val block: CoordinateBlock,
+    private val unfoldDirection: UnfoldDirection.Value)
+  extends UnfoldResult {
+
+  override def isLocal: Boolean = false
+
+  override def direction: UnfoldDirection.Value = unfoldDirection
+}
+
+
 /**
  * [[DistributedTensor]] is an Dataset-based tensor, can be in compressed format similar to
  * CoordinateMatrix class in Spark. Dimensions are lazily computed, if none provided.
@@ -82,37 +94,34 @@ class DistributedTensor(
   override def getLayer(layer: Int): Matrix = {
     require(layer >= 0 && layer < numLayers,
       s"Invalid layer $layer of tensor (total layers $numLayers)")
-    val rdd = data.
+    val ds = data.
       filter(col("k") === layer).
       select(col("i"), col("j"), col("value")).
-      as[MatrixEntry].rdd
-    new CoordinateMatrix(rdd, numRows, numCols).toBlockMatrix.toLocalMatrix
+      as[MatrixEntry]
+    CoordinateBlock(ds, numRows, numCols).toLocalMatrix
   }
 
   override def unfold(direction: UnfoldDirection.Value): UnfoldResult = {
-    val matrix = direction match {
+    val block = direction match {
       case UnfoldDirection.A1 =>
-        val rdd = data.
+        val ds = data.
           select(col("i").as("i"), (col("j") + lit(numCols) * col("k")).as("j"), col("value")).
-          as[MatrixEntry].
-          rdd
-        new CoordinateMatrix(rdd, numRows, numLayers * numCols)
+          as[MatrixEntry]
+        CoordinateBlock(ds, numRows, numLayers * numCols)
       case UnfoldDirection.A2 =>
-        val rdd = data.
+        val ds = data.
           select(col("j").as("i"), (col("k") + lit(numLayers) * col("i")).as("j"), col("value")).
-          as[MatrixEntry].
-          rdd
-        new CoordinateMatrix(rdd, numCols, numRows * numLayers)
+          as[MatrixEntry]
+        CoordinateBlock(ds, numCols, numRows * numLayers)
       case UnfoldDirection.A3 =>
-        val rdd = data.
+        val ds = data.
           select(col("k").as("i"), (col("i") + lit(numRows) * col("j")).as("j"), col("value")).
-          as[MatrixEntry].
-          rdd
-        new CoordinateMatrix(rdd, numLayers, numCols * numRows)
+          as[MatrixEntry]
+        CoordinateBlock(ds, numLayers, numCols * numRows)
       case otherMode =>
         throw new IllegalArgumentException(s"Unrecognized unfolding mode $otherMode")
     }
-    DistributedUnfoldResult(matrix, direction)
+    DistributedUnfoldResult(block, direction)
   }
 
   /** Persist tensor with provided level, if none set */
@@ -130,9 +139,9 @@ class DistributedTensor(
   override def hosvd(k1: Int, k2: Int, k3: Int): Tensor = {
     persist()
 
-    val unfoldingA1 = unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult].matrix
-    val unfoldingA2 = unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult].matrix
-    val unfoldingA3 = unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].matrix
+    val unfoldingA1 = unfold(UnfoldDirection.A1).asInstanceOf[DistributedUnfoldResult].block
+    val unfoldingA2 = unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult].block
+    val unfoldingA3 = unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].block
 
     val svd1 = DistributedTensor.computeSVD(unfoldingA1, k1,
       level = StorageLevel.MEMORY_AND_DISK, computeU = true, computeV = false)
@@ -141,21 +150,25 @@ class DistributedTensor(
     val svd3 = DistributedTensor.computeSVD(unfoldingA3, k3,
       level = StorageLevel.MEMORY_AND_DISK, computeU = true, computeV = false)
 
-    val U1 = svd1.U.toBlockMatrix.transpose
-    val mult1 = U1.multiply(unfoldingA1.toBlockMatrix)
-    val tensor1 = DistributedTensor.fold(spark, mult1.toCoordinateMatrix, UnfoldDirection.A1,
+    // We optimize matrix multiplication for HOSVD.
+    // TODO: describe the changes
+
+    val U1 = svd1.U
+    val mat1 = unfoldingA1
+    val mult1 = DistributedTensor.multiply(mat1.transpose, U1).transpose
+    val tensor1 = DistributedTensor.fold(mult1, UnfoldDirection.A1,
       mult1.numRows.toInt, numCols, numLayers)
 
-    val U2 = svd2.U.toBlockMatrix.transpose
-    val mult2 = U2.multiply(tensor1.unfold(UnfoldDirection.A2).
-      asInstanceOf[DistributedUnfoldResult].matrix.toBlockMatrix)
-    val tensor2 = DistributedTensor.fold(spark, mult2.toCoordinateMatrix, UnfoldDirection.A2,
+    val U2 = svd2.U
+    val mat2 = tensor1.unfold(UnfoldDirection.A2).asInstanceOf[DistributedUnfoldResult].block
+    val mult2 = DistributedTensor.multiply(mat2.transpose, U2).transpose
+    val tensor2 = DistributedTensor.fold(mult2, UnfoldDirection.A2,
       tensor1.numRows, mult2.numRows.toInt, tensor1.numLayers)
 
-    val U3 = svd3.U.toBlockMatrix.transpose
-    val mult3 = U3.multiply(tensor2.unfold(UnfoldDirection.A3).
-      asInstanceOf[DistributedUnfoldResult].matrix.toBlockMatrix)
-    val tensor3 = DistributedTensor.fold(spark, mult3.toCoordinateMatrix, UnfoldDirection.A3,
+    val U3 = svd3.U
+    val mat3 = tensor2.unfold(UnfoldDirection.A3).asInstanceOf[DistributedUnfoldResult].block
+    val mult3 = DistributedTensor.multiply(mat3.transpose, U3).transpose
+    val tensor3 = DistributedTensor.fold(mult3, UnfoldDirection.A3,
       tensor2.numRows, tensor2.numCols, mult3.numRows.toInt)
 
     unpersist()
@@ -165,9 +178,9 @@ class DistributedTensor(
 
   override def computeSVD(
       k: Int,
-      direction: UnfoldDirection.Value): SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
-    val matrix = unfold(direction).asInstanceOf[DistributedUnfoldResult].matrix
-    DistributedTensor.computeSVD(matrix, k,
+      direction: UnfoldDirection.Value): SingularValueDecomposition[Matrix, Matrix] = {
+    val block = unfold(direction).asInstanceOf[DistributedUnfoldResult].block
+    DistributedTensor.computeSVD(block, k,
       level = StorageLevel.MEMORY_AND_DISK, computeU = true, computeV = true)
   }
 }
@@ -193,79 +206,77 @@ object DistributedTensor {
   }
 
   private def failDimensionsCheck(
-      matrix: CoordinateMatrix,
+      block: CoordinateBlock,
       direction: UnfoldDirection.Value,
       rows: Int,
       cols: Int,
       layers: Int): Unit = {
-    throw new IllegalArgumentException("Failed to match dimensions from coordinate matrix to " +
-      s"tensor using direction $direction. Cannot convert ${matrix.numRows}x${matrix.numCols} " +
-      s"into ${rows}x${cols}x${layers}")
+    throw new IllegalArgumentException(
+      "Failed to match dimensions from coordinate block (matrix) to tensor using direction " +
+      s"$direction: ${block.numRows}x${block.numCols} => ${rows}x${cols}x${layers}")
   }
 
   def fold(
-      spark: SparkSession,
-      matrix: CoordinateMatrix,
+      block: CoordinateBlock,
       direction: UnfoldDirection.Value,
       rows: Int,
       cols: Int,
       layers: Int): Tensor = {
+    import block.data.sparkSession.implicits._
 
-    import spark.implicits._
+    // TODO: describe folding operations and changes
 
-    val rdd = direction match {
+    val ds = direction match {
       case UnfoldDirection.A1 =>
-        if (!(matrix.numRows == rows && matrix.numCols == cols.toLong * layers)) {
-          failDimensionsCheck(matrix, direction, rows, cols, layers)
+        if (!(block.numRows == rows && block.numCols == cols.toLong * layers)) {
+          failDimensionsCheck(block, direction, rows, cols, layers)
         }
-        matrix.entries.map { entry =>
-          val i = entry.i.toInt
-          val j = entry.j.toInt % cols
-          val k = (entry.j - j).toInt / cols
-          TensorEntry(i, j, k, entry.value)
-        }
+        block.data.select(
+          col("i").cast("int").as("i"),
+          (col("j") % cols).cast("int").as("j"),
+          ((col("j") - (col("j") % cols)) / cols).cast("int").as("k"),
+          col("value")
+        ).as[TensorEntry]
       case UnfoldDirection.A2 =>
-        if (!(matrix.numRows == cols && matrix.numCols == rows.toLong * layers)) {
-          failDimensionsCheck(matrix, direction, rows, cols, layers)
+        if (!(block.numRows == cols && block.numCols == rows.toLong * layers)) {
+          failDimensionsCheck(block, direction, rows, cols, layers)
         }
-        matrix.entries.map { entry =>
-          val j = entry.i.toInt
-          val k = entry.j.toInt % layers
-          val i = (entry.j - k).toInt / layers
-          TensorEntry(i, j, k, entry.value)
-        }
+        block.data.select(
+          ((col("j") - (col("j") % layers)) / layers).cast("int").as("i"),
+          col("i").cast("int").as("j"),
+          (col("j") % layers).cast("int").as("k"),
+          col("value")
+        ).as[TensorEntry]
       case UnfoldDirection.A3 =>
-        if (!(matrix.numRows == layers && matrix.numCols == cols.toLong * rows)) {
-          failDimensionsCheck(matrix, direction, rows, cols, layers)
+        if (!(block.numRows == layers && block.numCols == cols.toLong * rows)) {
+          failDimensionsCheck(block, direction, rows, cols, layers)
         }
-        matrix.entries.map { entry =>
-          val i = entry.j.toInt % rows
-          val j = (entry.j - i).toInt / rows
-          val k = entry.i.toInt
-          TensorEntry(i, j, k, entry.value)
-        }
+        block.data.select(
+          (col("j") % rows).cast("int").as("i"),
+          ((col("j") - (col("j") % rows)) / rows).cast("int").as("j"),
+          col("i").cast("int").as("k"),
+          col("value")
+        ).as[TensorEntry]
       case otherMode =>
         throw new IllegalArgumentException(s"Unrecognized unfolding mode $otherMode")
     }
-    new DistributedTensor(rdd.toDS, rows, cols, layers)
+    new DistributedTensor(ds, rows, cols, layers)
   }
 
   private[hosvd] def computeSVD(
-      matrix: CoordinateMatrix,
+      block: CoordinateBlock,
       k: Int,
       level: StorageLevel,
       rCond: Double = 1e-9,
       computeU: Boolean = false,
       computeV: Boolean = false):
-    SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
-
-    val sc = matrix.entries.sparkContext
+    SingularValueDecomposition[Matrix, Matrix] = {
 
     // whether or not input matrix should be transposed for SVD
-    val transposed = matrix.numCols() > matrix.numRows()
+    val transposed = block.numCols > block.numRows
     val extractU = computeU && !transposed || computeV && transposed
 
-    val irm = (if (transposed) matrix.transpose else matrix).toIndexedRowMatrix
+    val irm = (if (transposed) block.transpose else block).toIndexedRowMatrix
     irm.rows.persist(level)
     val svd = irm.computeSVD(k, computeU = extractU, rCond = rCond)
 
@@ -279,16 +290,9 @@ object DistributedTensor {
 
     val umat = if (computeU) {
       if (transposed) {
-        val V = svd.V.transpose
-        val vrows = V.numRows
-        val vcols = V.numCols
-
-        val rows = V.toArray.sliding(vrows, vrows).
-          zipWithIndex.
-          map { case (arr, row) => IndexedRow(row, Vectors.dense(arr)) }.toSeq
-        new IndexedRowMatrix(sc.parallelize(rows), vcols, vrows)
+        svd.V
       } else {
-        new IndexedRowMatrix(sc.parallelize(uarr), urows, ucols)
+        new DenseMatrix(urows, ucols, uarr.flatMap { _.vector.toArray }, true)
       }
     } else {
       null
@@ -305,5 +309,24 @@ object DistributedTensor {
     }
 
     SingularValueDecomposition(umat, svd.s, vmat)
+  }
+
+  private[hosvd] def multiply(block: CoordinateBlock, local: Matrix): CoordinateBlock = {
+    import block.data.sparkSession.implicits._
+
+    val rows = block.numRows
+    val cols = local.numCols
+    val irm = block.toIndexedRowMatrix.multiply(local)
+    // copied from IndexedRowMatrix.toCoordinateMatrix to ensure that dimensions are not recomputed
+    val entries = irm.rows.flatMap { row =>
+      val rowIndex = row.index
+      row.vector match {
+        case SparseVector(size, indices, values) =>
+          Iterator.tabulate(indices.length)(i => MatrixEntry(rowIndex, indices(i), values(i)))
+        case DenseVector(values) =>
+          Iterator.tabulate(values.length)(i => MatrixEntry(rowIndex, i, values(i)))
+      }
+    }
+    CoordinateBlock(entries.toDS, rows, cols)
   }
 }
